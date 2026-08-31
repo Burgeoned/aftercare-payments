@@ -152,3 +152,30 @@ reference curl example uses `POST /payments`. Rather than pick one and discover
 the mistake at runtime, the smoke test resolves it against the live sandbox
 before any application code depends on the answer. The client currently uses
 `/payments`, matching the API reference.
+
+---
+
+## D-008: ACH debit, not ACH credit transfer
+
+Date: 2026-08-30
+
+**Decision.** The connector enables ACH under Bank Debit. The ACH listed under
+Bank Transfer is left off, as is the entire Bank Redirect group.
+
+**Why.** They are different rails despite sharing a name. Bank Debit ACH is a
+pull: the patient authorizes once and the provider initiates. Bank Transfer ACH
+is a push: the patient is shown bank details and moves the money themselves.
+
+Push is wrong for patient billing twice over. It sends the patient into their
+banking app to finish paying a medical bill, which is where an unpleasant task
+gets abandoned. And it converts collection into a reconciliation problem,
+matching unattributed incoming funds to a balance, which is precisely the drift
+the derived-status model in `DESIGN.md` section 12 exists to prevent.
+
+Bank Redirect is entirely European: iDEAL, Giropay, EPS, Bancontact, Przelewy24,
+Multibanco. Same for Bacs and Sepa. The brief scopes this to the US market.
+
+**Final connector configuration.** Cards and ACH debit, plus Apple Pay and Google
+Pay once the app is on a verified HTTPS domain. Nothing else was enabled merely
+because it was available, and BNPL was left off deliberately per `DOMAIN.md`
+section 4 rather than by omission.

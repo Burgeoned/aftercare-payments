@@ -31,6 +31,8 @@ Read in this order.
 | [`docs/DESIGN.md`](docs/DESIGN.md) | The architecture, and the requirement each decision serves |
 | [`docs/SCOPE.md`](docs/SCOPE.md) | What was built, what was deferred, and how each deferred flow would be approached |
 | [`src/lib/domain/types.ts`](src/lib/domain/types.ts) | The interface contract, written before implementation |
+| [`HANDOFF.md`](HANDOFF.md) | Build brief: verified API facts, gated build order, invariants |
+| [`docs/DECISIONS.md`](docs/DECISIONS.md) | Running log of decisions made during the build, including the ones that were reversed |
 
 ## Notable decisions
 

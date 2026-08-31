@@ -91,6 +91,8 @@ function convert(jsonlPath) {
   let started = null;
   let branch = null;
   let turns = 0;
+  let subagentTurns = 0;
+  let inSubagent = false;
 
   for (const line of lines) {
     let record;
@@ -109,26 +111,53 @@ function convert(jsonlPath) {
     const body = renderContent(message.content);
     if (!body) continue;
 
+    /**
+     * Subagent turns land in this same file flagged `isSidechain`. They are not
+     * the operator talking, and rendering them inline as prompts makes the
+     * transcript unreadable and overstates how much was directed by hand. They
+     * are kept, because delegation is part of the process worth showing, but
+     * they are fenced off and counted separately.
+     */
+    const isSide = record.isSidechain === true;
+
+    if (isSide && !inSubagent) {
+      out.push(`\n<blockquote>\n<strong>Subagent thread</strong>\n`);
+      inSubagent = true;
+    } else if (!isSide && inSubagent) {
+      out.push(`\n</blockquote>\n`);
+      inSubagent = false;
+    }
+
     if (message.role === "user") {
-      turns += 1;
-      out.push(`\n---\n\n### ${turns}. Prompt\n\n${body}`);
+      if (isSide) {
+        subagentTurns += 1;
+        out.push(`\n**Subagent prompt**\n\n${body}`);
+      } else {
+        turns += 1;
+        out.push(`\n---\n\n### ${turns}. Prompt\n\n${body}`);
+      }
     } else if (message.role === "assistant") {
-      out.push(`\n**Response**\n\n${body}`);
+      out.push(`\n**${isSide ? "Subagent response" : "Response"}**\n\n${body}`);
     }
   }
+
+  if (inSubagent) out.push(`\n</blockquote>\n`);
 
   const header = [
     `# Session ${jsonlPath.split(/[\\/]/).pop().replace(".jsonl", "")}`,
     "",
     `- Started: ${started ?? "unknown"}`,
     `- Branch: ${branch ?? "unknown"}`,
-    `- Prompts: ${turns}`,
+    `- Operator prompts: ${turns}`,
+    `- Subagent turns: ${subagentTurns}`,
     "",
     "Exported by `scripts/export-session.mjs`. Tool output is truncated and",
-    "credential-shaped strings are redacted.",
+    "credential-shaped strings are redacted. Subagent threads are quoted blocks",
+    "and counted separately, because they are delegated work rather than",
+    "direction given by hand.",
   ].join("\n");
 
-  return { markdown: `${header}\n${out.join("\n")}\n`, turns, started };
+  return { markdown: `${header}\n${out.join("\n")}\n`, turns, subagentTurns, started };
 }
 
 const args = process.argv.slice(2);
@@ -158,11 +187,11 @@ if (!listOnly) mkdirSync(outDir, { recursive: true });
 console.log(`\nTranscripts in ${projectDir}\n`);
 
 for (const file of files.sort()) {
-  const { markdown, turns, started } = convert(join(projectDir, file));
+  const { markdown, turns, subagentTurns, started } = convert(join(projectDir, file));
   const name = `session-${file.replace(".jsonl", "").slice(0, 8)}.md`;
 
   if (listOnly) {
-    console.log(`  ${name.padEnd(24)} ${turns} prompts   ${started ?? ""}`);
+    console.log(`  ${name.padEnd(24)} ${turns} prompts, ${subagentTurns} subagent   ${started ?? ""}`);
     continue;
   }
 

@@ -162,6 +162,48 @@ Also append to `docs/SCOPE.md` if something planned gets deferred during the
 build. The deferral list is graded, and a deferral discovered while building with
 a real reason attached is worth more than one predicted in advance.
 
+## Working with subagents
+
+Subagent turns are written into the same transcript file flagged
+`isSidechain: true`. The exporter fences them into quoted blocks and counts them
+separately, so they will be visible but clearly marked as delegated work.
+
+That has a consequence worth planning around: **a subagent's reasoning is buried
+where nobody will read it.** If a decision gets made inside a sidechain, it is
+effectively undocumented.
+
+So:
+
+1. **Delegate investigation, not decisions.** A subagent is good for "find every
+   place X is referenced" or "read these three doc pages and report the API
+   shape." The call about what to do with the answer belongs in the main thread.
+2. **Summarize every subagent result back into the main thread in your own
+   words** before acting on it. One or two sentences. That is what a reader sees.
+3. **Verify before trusting.** A subagent report is a claim, not a fact,
+   especially about API shapes. `docs/DECISIONS.md` D-007 exists because a
+   documented endpoint path disagreed with another documented endpoint path.
+4. **Record the delegation in `docs/DECISIONS.md`** when it changed the outcome:
+   what was delegated, what came back, what was done with it.
+
+## Documenting as you go
+
+One deliverable shares these sessions, so the reasoning has to survive outside
+the transcript. Two rules.
+
+**Write decisions down when you make them, not afterwards.** A decision
+reconstructed at the end of the week is a rationalization. `docs/DECISIONS.md`
+is append-only for that reason.
+
+**Do not perform for the reader.** Do not narrate for an audience, do not
+manufacture deliberation, and do not tidy away the parts where something was
+wrong. Record the dead ends, the reversals, and the times a documented API turned
+out not to match reality. A log in which every decision was correct on the first
+try is not evidence of good judgment, it is evidence of editing, and the reader
+is a payments engineer who will spot it immediately.
+
+The honest version is also the strongest version. Write it that way and no
+curation is needed later.
+
 ## Exporting the sessions
 
 One deliverable shares the AI sessions. `scripts/export-session.mjs` converts

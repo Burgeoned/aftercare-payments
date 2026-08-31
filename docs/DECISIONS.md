@@ -179,3 +179,27 @@ Multibanco. Same for Bacs and Sepa. The brief scopes this to the US market.
 Pay once the app is on a verified HTTPS domain. Nothing else was enabled merely
 because it was available, and BNPL was left off deliberately per `DOMAIN.md`
 section 4 rather than by omission.
+
+---
+
+## D-009: the SDK confirmation step is not end-to-end testable in automation
+
+Date: 2026-08-30
+
+**Observation, not a choice.** Hyperswitch nests a per-field iframe inside the
+payment element iframe to isolate card entry. Clicks focus the outer frame and
+keyboard events do not route into the inner one, so a browser automation harness
+cannot fill the card form. Verified at two viewport scales to rule out a
+coordinate mismatch.
+
+**Consequence for testing.** Automated coverage targets the server and webhook
+paths: intent creation, signature verification, idempotency on `event_id`,
+ordering on `updated`, and balance derivation. The confirmation step is verified
+manually and documented as such. Writing a brittle harness against a
+deliberately isolated iframe would be effort spent fighting a security control.
+
+**Worth saying out loud:** the thing that blocked the test is the same thing that
+keeps PCI scope at SAQ A. The isolation is the feature.
+
+**First successful payment.** `pay_iOpVKoaAvGIt6mEyaEe5`, $1.00, card, reached
+`succeeded` on 2026-08-30.

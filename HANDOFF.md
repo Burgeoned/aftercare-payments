@@ -77,10 +77,21 @@ Each step ends in something observable. Do not proceed past a failing gate.
 **1. Scaffold.** Next.js App Router, TypeScript strict, Tailwind. No other
 dependencies without asking. `npm run build` passes.
 
-**2. One payment through the sandbox, however ugly.** A hardcoded amount, a
-button, the Unified Checkout SDK, a `succeeded` status in the Hyperswitch
-dashboard. This de-risks the entire week. Do it before any domain modeling.
-*Gate: a real sandbox payment reaches `succeeded`.*
+**2. One payment through the sandbox, however ugly.** DONE, 2026-08-30.
+Verified end to end: `/api/payments/intent` creates a real payment, the Unified
+Checkout SDK mounts and renders Card and ACH Debit, and a test card payment
+reached `succeeded` (`pay_iOpVKoaAvGIt6mEyaEe5`). The integration is no longer a
+risk. *Gate passed.*
+
+Two things learned here that the next steps depend on:
+
+- The card fields live in an iframe nested inside the payment element iframe.
+  Browser automation cannot type into them, so any end-to-end test of the
+  confirmation step is manual. Plan test coverage around the server and webhook
+  paths, which are automatable, rather than the SDK surface, which is not.
+- Wallets do not render on `http://localhost`. Google Pay mounts at 0x0 and
+  Apple Pay does not appear. Retest both on the Vercel URL before concluding
+  anything about them.
 
 **3. Fixtures and statement lookup.** Implement against `types.ts`. Two or three
 statements with realistic adjudication data: charged, allowed, payer paid,

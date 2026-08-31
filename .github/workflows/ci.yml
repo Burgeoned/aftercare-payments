@@ -1,0 +1,29 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      # .npmrc sets ignore-scripts. See docs/DECISIONS.md D-001.
+      - run: npm ci
+
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run test
+
+      # Builds without secrets on purpose. Every route that reads configuration
+      # is force-dynamic and resolves it per request, so a build that needs
+      # secrets would mean a route is leaking them into a static artifact.
+      - run: npm run build

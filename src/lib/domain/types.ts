@@ -117,12 +117,7 @@ export interface LineItem {
  * is worse than declining. See docs/SCOPE.md item 7.
  */
 export type StatementStatus =
-  | "open"
-  | "payment_pending"
-  | "paid"
-  | "partially_refunded"
-  | "refunded"
-  | "transferred";
+  "open" | "payment_pending" | "paid" | "partially_refunded" | "refunded" | "transferred";
 
 export interface Statement {
   readonly id: string;
@@ -204,10 +199,7 @@ export type RefundStatus = "pending" | "succeeded" | "failed";
  * docs/DOMAIN.md section 3.
  */
 export type RefundReason =
-  | "readjudication"
-  | "overpayment"
-  | "financial_assistance"
-  | "duplicate_payment";
+  "readjudication" | "overpayment" | "financial_assistance" | "duplicate_payment";
 
 /**
  * Bound to a specific payment, not to a statement. That is what guarantees
@@ -283,10 +275,13 @@ export type PaymentError =
   | { readonly kind: "statement_not_found"; readonly ref: string }
   | { readonly kind: "statement_already_paid"; readonly statementId: string }
   | { readonly kind: "statement_transferred"; readonly statementId: string }
-  | { readonly kind: "amount_exceeds_balance"; readonly requested: Cents; readonly remaining: Cents }
+  | {
+      readonly kind: "amount_exceeds_balance";
+      readonly requested: Cents;
+      readonly remaining: Cents;
+    }
   | { readonly kind: "processor_rejected"; readonly reason: string }
   | { readonly kind: "processor_unreachable" };
 
 export type Result<T, E> =
-  | { readonly ok: true; readonly value: T }
-  | { readonly ok: false; readonly error: E };
+  { readonly ok: true; readonly value: T } | { readonly ok: false; readonly error: E };

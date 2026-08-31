@@ -1,0 +1,24 @@
+# Development image.
+#
+# This is not the deploy path. Vercel builds from source and ignores this file.
+# It exists because the Hyperswitch SDK depends on rescript, whose postinstall
+# spawns a bundled ninja binary that fails on Windows hosts. On Linux the same
+# install is clean, so this container gives every contributor and agent an
+# identical, working environment regardless of host OS.
+#
+# See docs/DECISIONS.md D-001.
+
+FROM node:24-bookworm-slim
+
+WORKDIR /app
+
+# Dependency layer, cached until the manifests actually change.
+COPY package.json package-lock.json .npmrc ./
+RUN npm ci
+
+COPY . .
+
+EXPOSE 3000
+ENV HOSTNAME=0.0.0.0
+
+CMD ["npm", "run", "dev", "--", "--hostname", "0.0.0.0"]

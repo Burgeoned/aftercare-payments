@@ -34,7 +34,8 @@
     "test:watch": "vitest",
     "format": "prettier --write .",
     "verify": "npm run typecheck && npm run lint && npm run test",
-    "smoke": "node scripts/smoke.mjs"
+    "smoke": "node scripts/smoke.mjs",
+    "export-sessions": "node scripts/export-session.mjs"
   },
   "engines": {
     "node": ">=20"

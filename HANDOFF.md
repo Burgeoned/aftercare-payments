@@ -151,6 +151,27 @@ Also append to `docs/SCOPE.md` if something planned gets deferred during the
 build. The deferral list is graded, and a deferral discovered while building with
 a real reason attached is worth more than one predicted in advance.
 
+## Exporting the sessions
+
+One deliverable shares the AI sessions. `scripts/export-session.mjs` converts
+this repo's Claude Code transcripts to readable Markdown:
+
+```
+npm run export-sessions
+```
+
+It reads `~/.claude/projects/<slug-of-this-repo>/*.jsonl`, so only sessions
+started inside this repo are picked up and sessions from other projects cannot
+leak in. It truncates tool output, and it redacts credential-shaped strings as a
+safety net. The safety net is not permission to be careless: keys still never
+belong in a session.
+
+Run it at the end, then write `ai-sessions/README.md` pointing at the handful of
+moments worth reading. The index is the deliverable. Nobody reads a raw
+transcript, and "here is how I supervise a model" is what was actually asked for.
+
+Review every exported file before committing it.
+
 ## Do not
 
 - Do not write the 3-page architecture doc. That deliverable is explicitly

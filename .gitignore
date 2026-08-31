@@ -30,3 +30,6 @@ Thumbs.db
 npm-debug.log*
 yarn-error.log*
 *.log
+
+# exported transcripts are reviewed by hand before committing
+ai-sessions/session-*.md

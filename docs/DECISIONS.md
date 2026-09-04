@@ -467,3 +467,45 @@ the accent that carries the brand measures 2.58:1 on the dark ground, so it
 would have needed replacing on the instrument anyway. At that point the
 signature is a colour that only survives on half the pages.
 
+---
+
+## D-017: the balance folds the log by processor id, newest row wins
+
+Date: 2026-09-04
+
+**Latent defect, found while reviewing the architecture before build step 5.**
+`deriveBalance` summed every succeeded payment row. The log holds one row per
+observation, not one per payment: the intent route writes a row when the payment
+is created, and step 5 appends another when the webhook reports the outcome.
+
+Two rows describing one $32.70 payment therefore read as $65.40. A statement
+would pay itself off at half the money, and the patient would be told they were
+square when they were not. Demonstrated by test before the fix:
+
+```
+AssertionError: expected 6540 to be 3270
+```
+
+Nothing appends twice yet, so this had not fired. It would have fired on the
+first webhook ever delivered.
+
+**Decision.** The log is folded to one record per processor object before
+anything is summed. Identity is the processor's own id, `hyperswitchPaymentId`
+for payments and `hyperswitchRefundId` for refunds, and the newest `updatedAt`
+wins.
+
+**Why the same rule as ordering.** The webhook handler in step 5 already has to
+compare `updated` to reject out-of-order deliveries. Applying that comparison at
+read time as well means a late-arriving stale webhook cannot walk a balance
+backwards even if it is appended, because the fold ignores it. The ordering rule
+is enforced twice, and the second place is the one that decides what a patient
+is shown.
+
+**What it must not break, and is tested.** Split tender is two genuinely
+different processor payments against one statement and is still counted twice.
+The fold collapses observations of one payment, never two payments.
+
+**Worth stating.** The append-only model in `DESIGN.md` section 12 is the right
+one and it is not self-executing. Append-only means the read side carries the
+interpretation, and this is the interpretation. A log without a fold rule is not
+a ledger, it is a list.

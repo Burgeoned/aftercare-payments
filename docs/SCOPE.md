@@ -8,17 +8,23 @@ why it did not make the cut, and what building it would actually involve.
 
 ## Built
 
-| Flow | Why it is the core |
-|---|---|
-| Statement lookup without an account | Patients pay from a paper or emailed statement. Forcing account creation is the single largest source of abandonment in this vertical |
-| Bill presentation with payer adjustment detail | The explanation is the product. A patient who does not understand the residual calls the billing office or disputes the charge |
-| Card payment via Unified Checkout | The default path, and the one that sets PCI scope |
-| Health account card recognition and tender classification | The domain-specific behavior, handled where it actually lives, at the BIN |
-| ACH debit as an alternative method | The economics argument from `DOMAIN.md` section 6, made real |
-| Split tender across two payment attempts | Health account balances are finite. Without this, a patient with a partial FSA balance cannot pay at all |
-| Verified webhook ingestion as source of truth | Money state does not come from a browser redirect |
-| Partial refund after simulated re-adjudication | The flow that separates this vertical from retail |
-| Decline handling with immediate alternative method | Highest-value error path in the vertical |
+Status is stated per row because this table was written as a plan and would
+otherwise read as a claim. `Built` means it works end to end against the
+sandbox. `Planned` means it is designed, argued, and not yet implemented, which
+is a different thing from deferred: the deferrals are in the next section and
+are not coming back.
+
+| Flow | Status | Why it is the core |
+|---|---|---|
+| Statement lookup without an account | Built | Patients pay from a paper or emailed statement. Forcing account creation is the single largest source of abandonment in this vertical |
+| Bill presentation with payer adjustment detail | Built | The explanation is the product. A patient who does not understand the residual calls the billing office or disputes the charge |
+| Card payment via Unified Checkout | Built | The default path, and the one that sets PCI scope |
+| Health account card recognition and tender classification | Planned, step 6 | The domain-specific behavior, handled where it actually lives, at the BIN |
+| ACH debit as an alternative method | Connector configured, step 6 | The economics argument from `DOMAIN.md` section 6, made real |
+| Split tender across two payment attempts | Partial, step 6 | Health account balances are finite. Without this, a patient with a partial FSA balance cannot pay at all |
+| Verified webhook ingestion as source of truth | Planned, step 5 | Money state does not come from a browser redirect |
+| Partial refund after simulated re-adjudication | Planned, step 6 | The flow that separates this vertical from retail |
+| Decline handling with immediate alternative method | Planned, step 6 | Highest-value error path in the vertical |
 
 ## Deferred
 

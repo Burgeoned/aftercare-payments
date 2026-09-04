@@ -20,6 +20,7 @@ import type {
   Statement,
   StatementBalance,
   StatementStatus,
+  Timestamp,
 } from "./types";
 
 /**
@@ -87,12 +88,44 @@ function deriveStatus(
   return "open";
 }
 
+/**
+ * Collapses an append-only log to one record per processor object.
+ *
+ * The log holds a row per observation, not per payment: an intent row written
+ * when the payment is created, then a row per webhook as the processor reports
+ * progress. Summing rows counts the same money once per observation. A single
+ * $32.70 payment that succeeded and was then confirmed by a webhook reads as
+ * $65.40, and the statement pays itself off twice over.
+ *
+ * The processor's own id is the identity, and the newest `updatedAt` wins. That
+ * is the same timestamp comparison the webhook handler uses to reject
+ * out-of-order deliveries, applied at read time so a late arrival cannot walk
+ * the balance backwards either. See docs/DESIGN.md section 6.
+ */
+function latestPerProcessorId<T extends { readonly updatedAt: Timestamp }>(
+  rows: readonly T[],
+  identity: (row: T) => string,
+): readonly T[] {
+  const newest = new Map<string, T>();
+
+  for (const row of rows) {
+    const key = identity(row);
+    const held = newest.get(key);
+    if (held === undefined || row.updatedAt >= held.updatedAt) newest.set(key, row);
+  }
+
+  return [...newest.values()];
+}
+
 export function deriveBalance(
   statement: Statement,
   payments: readonly Payment[],
   refunds: readonly Refund[],
 ): StatementBalance {
-  const mine = payments.filter((p) => p.statementId === statement.id);
+  const mine = latestPerProcessorId(
+    payments.filter((p) => p.statementId === statement.id),
+    (p) => p.hyperswitchPaymentId,
+  );
   const myIds = new Set(mine.map((p) => p.id));
 
   // Only succeeded money counts. A processing payment is not collected, and
@@ -100,7 +133,12 @@ export function deriveBalance(
   const amountPaid = sum(mine.filter((p) => p.status === "succeeded").map((p) => p.amount));
 
   const amountRefunded = sum(
-    refunds.filter((r) => myIds.has(r.paymentId) && r.status === "succeeded").map((r) => r.amount),
+    latestPerProcessorId(
+      refunds.filter((r) => myIds.has(r.paymentId)),
+      (r) => r.hyperswitchRefundId,
+    )
+      .filter((r) => r.status === "succeeded")
+      .map((r) => r.amount),
   );
 
   const patientOwed = patientResponsibility(statement);

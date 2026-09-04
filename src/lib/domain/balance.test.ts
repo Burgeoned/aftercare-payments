@@ -14,7 +14,12 @@ import type { Payment, PaymentStatus, Refund, RefundStatus, Statement } from "./
 const statement: Statement = STATEMENTS.find((s) => s.ref === "AFT-4021-8837")!;
 const OWED = 3270; // $32.70, the residual on that statement.
 
-function payment(id: string, amount: number, status: PaymentStatus): Payment {
+function payment(
+  id: string,
+  amount: number,
+  status: PaymentStatus,
+  over: Partial<Payment> = {},
+): Payment {
   return {
     id,
     statementId: statement.id,
@@ -26,6 +31,7 @@ function payment(id: string, amount: number, status: PaymentStatus): Payment {
     failureReason: null,
     createdAt: "2026-08-05T10:00:00.000Z",
     updatedAt: "2026-08-05T10:00:00.000Z",
+    ...over,
   };
 }
 
@@ -150,6 +156,82 @@ describe("deriveBalance", () => {
     // An overpayment is a refund obligation, not a negative bill.
     const balance = deriveBalance(statement, [payment("p1", OWED + 5000, "succeeded")], []);
     expect(balance.remaining).toBe(0);
+  });
+});
+
+describe("supersession", () => {
+  /**
+   * The log holds one row per observation, not one per payment. Step 5 appends
+   * a webhook row for a payment the intent route already wrote, and summing
+   * rows would count that money twice.
+   */
+  it("counts one processor payment once, however many rows describe it", () => {
+    const balance = deriveBalance(
+      statement,
+      [
+        { ...payment("a", OWED, "processing"), hyperswitchPaymentId: "pay_X" },
+        {
+          ...payment("b", OWED, "succeeded"),
+          hyperswitchPaymentId: "pay_X",
+          updatedAt: "2026-08-05T10:05:00.000Z",
+        },
+      ],
+      [],
+    );
+
+    expect(balance.amountPaid).toBe(OWED);
+    expect(balance.status).toBe("paid");
+  });
+
+  it("keeps the newest row, not the last one appended", () => {
+    // An out-of-order delivery must not walk a succeeded payment backwards.
+    const balance = deriveBalance(
+      statement,
+      [
+        {
+          ...payment("b", OWED, "succeeded"),
+          hyperswitchPaymentId: "pay_X",
+          updatedAt: "2026-08-05T10:05:00.000Z",
+        },
+        {
+          ...payment("a", OWED, "processing"),
+          hyperswitchPaymentId: "pay_X",
+          updatedAt: "2026-08-05T10:00:00.000Z",
+        },
+      ],
+      [],
+    );
+
+    expect(balance.amountPaid).toBe(OWED);
+    expect(balance.status).toBe("paid");
+  });
+
+  it("still counts two genuinely different payments separately", () => {
+    // Split tender must not be collapsed by the same rule.
+    const balance = deriveBalance(
+      statement,
+      [payment("a", 2000, "succeeded"), payment("b", 1270, "succeeded")],
+      [],
+    );
+
+    expect(balance.amountPaid).toBe(OWED);
+  });
+
+  it("counts one refund once across repeated rows", () => {
+    const balance = deriveBalance(
+      statement,
+      [payment("p1", OWED, "succeeded")],
+      [
+        { ...refund("r1", "p1", 1000, "pending"), hyperswitchRefundId: "ref_X" },
+        {
+          ...refund("r2", "p1", 1000, "succeeded"),
+          hyperswitchRefundId: "ref_X",
+          updatedAt: "2026-08-20T10:05:00.000Z",
+        },
+      ],
+    );
+
+    expect(balance.amountRefunded).toBe(1000);
   });
 });
 

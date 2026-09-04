@@ -1,16 +1,22 @@
 import { cookies } from "next/headers";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 
+import { ACCESS_COOKIE, resolveAccess } from "@/lib/access";
 import { healthAccountEligibleAmount } from "@/lib/domain/balance";
 import { PROVIDER_NAME } from "@/lib/domain/fixtures";
 import { viewStatement } from "@/lib/domain/lookup";
 import { formatUsd } from "@/lib/domain/money";
-import { ACCESS_COOKIE, resolveAccess } from "@/lib/access";
 import { findStatementByRef } from "@/lib/domain/store";
 import type { Cents, StatementBalance } from "@/lib/domain/types";
 
 /**
  * The statement a patient sees after a successful lookup.
+ *
+ * Two grounds, and the split is the argument. The balance and the act of paying
+ * are the instrument: that is what the patient came for and it is stated once,
+ * large, at the top. The adjudication is the document: what was billed, what
+ * the plan allowed, what it paid, what is left.
  *
  * The explanation is the product. A patient who does not understand why they
  * owe the residual calls the billing office or disputes the charge, and both
@@ -28,71 +34,89 @@ function longDate(iso: string): string {
   });
 }
 
-/** A zero deduction is not a negative number, and "-$0.00" reads as a bug. */
+/** A zero deduction is not a negative number, and "-$0.00" reads as a defect. */
 function deduction(value: Cents): string {
   return value > 0 ? `-${formatUsd(value)}` : formatUsd(value);
 }
 
-function SummaryRow({
+function LedgerRow({
   label,
   value,
   note,
-  emphasis = false,
+  total = false,
+  marked = false,
 }: {
   label: string;
   value: string;
   note?: string;
-  emphasis?: boolean;
+  total?: boolean;
+  marked?: boolean;
 }) {
   return (
-    <div
-      className={`flex items-baseline justify-between gap-4 py-2 ${
-        emphasis ? "border-t border-[var(--line)] pt-3 text-base font-semibold" : "text-sm"
-      }`}
-    >
-      <span className={emphasis ? "" : "text-[var(--muted)]"}>
+    <div className={`ledger-row${total ? " ledger-total" : ""}`}>
+      <span className={total ? undefined : "muted"}>
         {label}
-        {note !== undefined && (
-          <span className="ml-2 text-xs text-[var(--muted)]">{note}</span>
-        )}
+        {note !== undefined && <span className="hint"> {note}</span>}
       </span>
-      <span className="tabular-nums">{value}</span>
+      <span className={marked ? "paid-mark" : undefined}>{value}</span>
     </div>
   );
 }
 
-function PaymentProgress({ balance }: { balance: StatementBalance }) {
-  if (balance.amountPaid === 0 && balance.amountRefunded === 0) return null;
+function DueHeader({
+  balance,
+  statementRef,
+}: {
+  balance: StatementBalance;
+  statementRef: string;
+}) {
+  if (balance.status === "paid") {
+    return (
+      <>
+        <p className="eyebrow" style={{ marginBottom: "0.9rem" }}>
+          Paid in full
+        </p>
+        <p className="answer paid-mark">{formatUsd(balance.patientResponsibility)}</p>
+        <p className="muted" style={{ marginTop: "1rem" }}>
+          Nothing further is owed on this statement.
+        </p>
+      </>
+    );
+  }
 
   return (
-    <div className="mt-4 space-y-0 border-t border-[var(--line)] pt-2">
-      <SummaryRow label="Paid to date" value={deduction(balance.amountPaid)} />
-      {balance.amountRefunded > 0 && (
-        <SummaryRow
-          label="Refunded to you"
-          value={`+${formatUsd(balance.amountRefunded)}`}
-          note="after re-adjudication"
-        />
+    <>
+      <p className="eyebrow" style={{ marginBottom: "0.9rem" }}>
+        {balance.amountPaid > 0 ? "Remaining balance" : "Amount due"}
+      </p>
+      <p className="answer">{formatUsd(balance.remaining)}</p>
+
+      {balance.amountPaid > 0 && (
+        <p className="muted" style={{ marginTop: "1rem" }}>
+          <span className="paid-mark num">{formatUsd(balance.amountPaid)}</span> already paid
+          against a {formatUsd(balance.patientResponsibility)} responsibility.
+        </p>
       )}
-      <SummaryRow label="Remaining balance" value={formatUsd(balance.remaining)} emphasis />
-    </div>
+
+      <div style={{ maxWidth: "20rem", marginTop: "2rem" }}>
+        <Link href={`/statement/${encodeURIComponent(statementRef)}/pay`} className="btn">
+          Pay this balance
+        </Link>
+      </div>
+    </>
   );
 }
 
-export default async function StatementPage({
-  params,
-}: {
-  params: Promise<{ ref: string }>;
-}) {
-  const { ref } = await params;
+export default async function StatementPage({ params }: { params: Promise<{ ref: string }> }) {
+  const { ref: routeRef } = await params;
 
-  const statement = findStatementByRef(decodeURIComponent(ref));
+  const statement = findStatementByRef(decodeURIComponent(routeRef));
   if (statement === null) redirect("/");
 
   /**
-   * The access grant is what proves the date of birth was supplied, and it is
-   * checked against this specific statement. A grant for one statement must not
-   * open another, or the credential is just the reference again.
+   * The access grant proves a date of birth was supplied, and it is checked
+   * against this specific statement. A grant for one statement must not open
+   * another, or the credential is just the reference again.
    */
   const granted = resolveAccess((await cookies()).get(ACCESS_COOKIE)?.value);
   if (granted !== statement.id) redirect("/");
@@ -102,97 +126,118 @@ export default async function StatementPage({
 
   const { balance, patientDisplayName } = view;
   const eligible = healthAccountEligibleAmount(statement);
-  const hasMixedEligibility = eligible > 0 && eligible < balance.patientResponsibility;
+  const mixedEligibility = eligible > 0 && eligible < balance.patientResponsibility;
 
   return (
-    <main className="mx-auto max-w-2xl px-6 py-12">
-      <header className="mb-8">
-        <p className="text-sm uppercase tracking-widest text-[var(--muted)]">{PROVIDER_NAME}</p>
-        <h1 className="mt-2 text-2xl font-semibold tracking-tight">
-          Statement {statement.ref}
-        </h1>
-        <p className="mt-1 text-sm text-[var(--muted)]">
-          {patientDisplayName} &middot; Date of service {longDate(statement.serviceDate)}
-        </p>
-      </header>
+    <>
+      <section className="instrument">
+        <div className="wrap" style={{ paddingTop: "3rem", paddingBottom: "3.5rem" }}>
+          <p className="eyebrow">
+            {PROVIDER_NAME} &middot; Statement {statement.ref}
+          </p>
+          <p className="muted" style={{ margin: "0.75rem 0 2.25rem", fontSize: "var(--fs-small)" }}>
+            {patientDisplayName} &middot; Date of service {longDate(statement.serviceDate)}
+          </p>
 
-      <section className="rounded-lg border border-[var(--line)]">
-        <div className="border-b border-[var(--line)] px-5 py-3">
-          <h2 className="text-sm font-medium">What your plan did with this bill</h2>
-        </div>
-
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[34rem] text-sm">
-            <thead>
-              <tr className="text-left text-xs uppercase tracking-wide text-[var(--muted)]">
-                <th className="px-5 py-2 font-medium">Service</th>
-                <th className="px-3 py-2 text-right font-medium">Billed</th>
-                <th className="px-3 py-2 text-right font-medium">Plan rate</th>
-                <th className="px-3 py-2 text-right font-medium">Plan paid</th>
-                <th className="px-5 py-2 text-right font-medium">You owe</th>
-              </tr>
-            </thead>
-            <tbody>
-              {statement.lineItems.map((item) => (
-                <tr key={item.id} className="border-t border-[var(--line)]">
-                  <td className="px-5 py-3">
-                    {item.description}
-                    {!item.healthAccountEligible && (
-                      <span className="ml-2 rounded border border-[var(--line)] px-1.5 py-0.5 text-xs text-[var(--muted)]">
-                        not HSA/FSA eligible
-                      </span>
-                    )}
-                  </td>
-                  <td className="px-3 py-3 text-right tabular-nums text-[var(--muted)]">
-                    {formatUsd(item.charged)}
-                  </td>
-                  <td className="px-3 py-3 text-right tabular-nums text-[var(--muted)]">
-                    {formatUsd(item.allowed)}
-                  </td>
-                  <td className="px-3 py-3 text-right tabular-nums text-[var(--muted)]">
-                    {formatUsd(item.payerPaid)}
-                  </td>
-                  <td className="px-5 py-3 text-right tabular-nums font-medium">
-                    {formatUsd(item.patientOwes)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-
-        <div className="border-t border-[var(--line)] px-5 py-4">
-          <SummaryRow label="Total billed" value={formatUsd(balance.totalCharged)} />
-          <SummaryRow
-            label="Plan discount"
-            value={deduction(balance.payerAdjustment)}
-            note="your plan's contracted rate"
-          />
-          <SummaryRow label="Plan paid" value={deduction(balance.payerPaid)} />
-          <SummaryRow
-            label="Your responsibility"
-            value={formatUsd(balance.patientResponsibility)}
-            emphasis
-          />
-          <PaymentProgress balance={balance} />
+          <DueHeader balance={balance} statementRef={statement.ref} />
         </div>
       </section>
 
-      {hasMixedEligibility && (
-        <p className="mt-4 text-sm text-[var(--muted)]">
-          {formatUsd(eligible)} of this balance is eligible for HSA or FSA funds. The
-          remainder is not, so a health account card cannot cover the whole amount.
-        </p>
-      )}
+      <section className="document">
+        <div className="wrap" style={{ paddingTop: "3.5rem", paddingBottom: "4.5rem" }}>
+          <div className="stack">
+            <div>
+              <p className="eyebrow">Explanation</p>
+              <h2 className="section-title mixed" style={{ margin: "0.75rem 0 1.5rem" }}>
+                What your plan did with this bill
+                <em>and what it left to you.</em>
+              </h2>
 
-      <div className="mt-8 rounded-lg border border-[var(--line)] p-5">
-        <h2 className="mb-1 font-medium">Pay this balance</h2>
-        <p className="text-sm text-[var(--muted)]">
-          Payment against a real statement lands in build step 4. This page proves the
-          adjudication breakdown first, because a patient who does not understand the
-          residual does not pay it.
-        </p>
-      </div>
-    </main>
+              <div className="card">
+                <div className="table-wrap">
+                  <table className="table">
+                    <thead>
+                      <tr>
+                        <th>Service</th>
+                        <th className="n">Billed</th>
+                        <th className="n">Plan rate</th>
+                        <th className="n">Plan paid</th>
+                        <th className="n">You owe</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {statement.lineItems.map((item) => (
+                        <tr key={item.id}>
+                          <td>
+                            {item.description}
+                            {!item.healthAccountEligible && (
+                              <span className="flag-warn">Not HSA/FSA</span>
+                            )}
+                          </td>
+                          <td className="n muted">{formatUsd(item.charged)}</td>
+                          <td className="n muted">{formatUsd(item.allowed)}</td>
+                          <td className="n muted">{formatUsd(item.payerPaid)}</td>
+                          <td className="n">{formatUsd(item.patientOwes)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div
+                  className="ledger rule-top"
+                  style={{ padding: "1.25rem 0.9rem 1.4rem", marginTop: "0" }}
+                >
+                  <LedgerRow label="Total billed" value={formatUsd(balance.totalCharged)} />
+                  <LedgerRow
+                    label="Plan discount"
+                    note="your plan's contracted rate"
+                    value={deduction(balance.payerAdjustment)}
+                  />
+                  <LedgerRow label="Plan paid" value={deduction(balance.payerPaid)} />
+                  <LedgerRow
+                    label="Your responsibility"
+                    value={formatUsd(balance.patientResponsibility)}
+                    total
+                  />
+
+                  {(balance.amountPaid > 0 || balance.amountRefunded > 0) && (
+                    <>
+                      <LedgerRow
+                        label="Paid to date"
+                        value={deduction(balance.amountPaid)}
+                        marked
+                      />
+                      {balance.amountRefunded > 0 && (
+                        <LedgerRow
+                          label="Refunded to you"
+                          note="after re-adjudication"
+                          value={`+${formatUsd(balance.amountRefunded)}`}
+                        />
+                      )}
+                      <LedgerRow label="Remaining" value={formatUsd(balance.remaining)} total />
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {mixedEligibility && (
+              <p className="note note-warn">
+                {formatUsd(eligible)} of this balance is eligible for HSA or FSA funds. The
+                rest is not, so a health account card cannot cover the whole amount and the
+                remainder has to come from another method.
+              </p>
+            )}
+
+            <p className="hint">
+              Amounts come from the payer&rsquo;s remittance. The plan rate is what your
+              insurer&rsquo;s contract allows the provider to charge, which is why the billed
+              column and the rate column differ.
+            </p>
+          </div>
+        </div>
+      </section>
+    </>
   );
 }

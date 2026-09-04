@@ -112,10 +112,24 @@ Two things learned here that the next steps depend on:
   log has the same problem and it is unsolved. Step 5 cannot work until it is.
   See D-013. Resolve this before starting step 5, not during it.
 
-**4. Real payment against a real statement.** `POST /api/payments/intent` creates
-the Hyperswitch payment and returns `client_secret`. Browser confirms directly
-with Hyperswitch. Amount comes from the derived balance, never from the client.
-*Gate: paying a statement produces a succeeded payment for the right amount.*
+**4. Real payment against a real statement.** DONE, 2026-09-04.
+`POST /api/payments/intent` reads the statement from the access cookie rather
+than the request body, derives the balance from the payment log, creates the
+Hyperswitch payment and returns `client_secret`. Checkout lives at
+`/statement/:ref/pay` and confirms browser to Hyperswitch directly. Verified:
+an intent for `AFT-4108-2290` is created for exactly $927.00 with no amount
+supplied, and requests without the cookie are refused with 401.
+
+The `/pay` smoke test page was removed. Once the intent route is bound to a
+statement, an unauthenticated payment path is a hole rather than a convenience.
+
+One thing learned here that the next steps depend on:
+
+- **A validated client amount is not safe.** `{"amount": 927.00}` created a
+  927 cent payment against a $927.00 balance, because JSON parses it to the
+  integer 927 and every check passes. The request now names a portion instead.
+  See D-015. Any future endpoint that takes money should take a portion or a
+  server-known quantity, never a number from a client.
 
 **5. Webhooks as source of truth.** Verify HMAC over the **raw** body, not the
 parsed JSON, or the signature will not match. Idempotent on `event_id`. Reject
@@ -124,14 +138,47 @@ derived from the payment log.
 *Gate: a payment marks the statement paid only after a verified webhook. Replaying
 a webhook changes nothing. An out-of-order webhook does not walk state backwards.*
 
+Two things already in place that this step depends on:
+
+- **The read side already collapses the log.** `deriveBalance` folds to one
+  record per `hyperswitchPaymentId`, newest `updatedAt` winning, so appending a
+  webhook row for a payment the intent route already wrote does not double count
+  it. See D-017. Append a superseding row; never edit one.
+- **Correlation needs an index and there is not one yet.** A webhook carries the
+  Hyperswitch payment id, and the ledger is keyed by statement, so there is no
+  way to find the statement without scanning. The payload does echo
+  `metadata.statement_ref`, but resolving our own ledger through a field the
+  processor round-tripped is fragile. Write
+  `aftercare:payment-index:<hyperswitchPaymentId> -> statementId` at intent
+  creation before starting this step.
+
+Confirmed against the docs on 2026-09-04, beyond what is listed above: the
+`event_id` duplicate window is 24 hours, and there are 18 event types rather
+than the 5 listed here, including `payment_cancelled`, `payment_authorized`,
+`payment_captured`, `action_required`, the full dispute lifecycle, and mandate
+events.
+
 **6. Domain flows.** Health account BIN classification and tender recording.
 Split tender across two attempts. Partial refund via a provider-side
 re-adjudication action. Decline handling that offers another method immediately.
 *Gate: the split tender and partial refund scenarios both complete.*
 
-**7. Risk controls.** Enable the BIN blocklist and card-testing guard in the
-dashboard. A public payment page reachable by statement reference is a card
-testing target. Note the configuration in `docs/DECISIONS.md`.
+**7. Risk controls.** A public payment page reachable by statement reference is a
+card testing target. Note the configuration in `docs/DECISIONS.md`.
+
+Correction to this step, verified against the docs on 2026-09-04: the blocklist
+is configured by API, not in the dashboard, and there is no separate
+card-testing guard. The blocklist toggle is the guard. It blocks three resource
+kinds: card fingerprint, card BIN (6 digits), and extended card BIN (8 digits).
+
+```
+POST   /blocklist/toggle?status=true
+POST   /blocklist
+GET    /blocklist?data_kind=payment_method
+DELETE /blocklist
+```
+
+A blocked payment fails with `HE_03`, "The payment is blocked".
 
 **8. Deploy and test cold.** Public URL, on a phone, with no local state.
 

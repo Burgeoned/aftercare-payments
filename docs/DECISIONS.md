@@ -379,3 +379,91 @@ provider gets a support call about a payment that actually worked.
 `/pay/return` refuses to assert success. See D-006. The redirect being broken
 here changed nothing about the money, and under the design it should not: build
 step 5 makes the webhook the thing that records the payment.
+
+---
+
+## D-015: the client names a portion, never an amount
+
+Date: 2026-09-04
+
+**Defect, found by testing the step 4 route against the sandbox.** The intent
+route accepted a client-supplied amount and validated it against the
+server-derived balance, which is what `DESIGN.md` section 8 calls for and is not
+sufficient.
+
+Posting `{"amount": 927.00}` to a statement with a $927.00 balance created a
+real payment for **927 cents**. It passed every check. JSON parses `927.00` to
+the integer `927`, so after parsing there is no difference between a caller
+meaning nine hundred and twenty seven dollars and one meaning nine hundred and
+twenty seven cents. `Number.isInteger` is true. The branded `Cents` type cannot
+help, because the value genuinely is an integer.
+
+A patient-side unit mixup therefore becomes a silent hundred-fold underpayment,
+and the statement stays open for a balance the patient believes they cleared.
+
+**Decision.** The request body carries a portion, not a number:
+
+```
+{ "portion": "full" }              full remaining balance
+{ "portion": "health_account" }    the health-account-eligible part of it
+```
+
+Both amounts are computed on the server from data it already holds. There is no
+number in the request for a unit error to hide in, and the split tender case
+that motivated a client amount in the first place is one of the two portions.
+
+**Why not fix the validation.** There is nothing to fix. The check was correct
+and the value was wrong before it arrived. Any rule tight enough to reject
+`927.00` also rejects `927`, which is a legitimate $9.27 payment. The only
+defence is not to accept the number.
+
+**Consequence for the contract.** `CreateIntentRequest` in
+`src/lib/domain/types.ts` still declares `amount: Cents`. It is now unused by
+the route and no longer describes the boundary. `types.ts` is the interface
+contract and is changed deliberately rather than incidentally, so it is left
+alone and flagged here instead.
+
+**Worth stating.** Hard rule 6 in `HANDOFF.md` says amounts are server-derived
+and a client-supplied amount is validated, never trusted. The implementation
+followed that rule exactly and was still wrong. The rule was not tight enough.
+
+---
+
+## D-016: the design method is borrowed, the brand is not
+
+Date: 2026-09-04
+
+**Decision.** The visual system is adapted from the YUNVO tools design system,
+which is a separate project of the author's. Its method is used: two grounds
+that mean something, contrast measured and recorded rather than estimated,
+colour that is only ever semantic, a stated type scale, zero radius, a fixed
+spacing rhythm. Its brand is not used: no mark, no gold, no condensed display
+face, no voice.
+
+**Why the method.** The earlier version of this application was one flat grey
+ground with rounded cards. That is what an unopinionated build looks like, and
+the problem is not that it is ugly. It is that no surface claimed to be anything
+in particular, so the bill explanation and the payment control read as the same
+kind of object when they are not.
+
+The rule that fixed it is the parent system's: dark is an instrument, light is a
+document. A medical statement is both. The patient operates the balance and
+reads the adjudication. Splitting those onto two grounds, with the typeface
+changing along with them, makes the distinction legible before anything is read.
+See `DESIGN-SYSTEM.md`.
+
+**Why not the brand.** The brand is built for a supplements and coaching
+company. Applying it to a patient billing page would put a fitness identity on a
+medical bill from a fictional health system, which is incoherent on its own
+terms, and the reviewer would reasonably read it as confusion about the
+exercise rather than as confidence. There is also a functional argument: a
+patient looking at an unexpected medical charge needs low arousal and clarity,
+which is close to the opposite of what a strong consumer brand voice is built to
+do.
+
+**Rejected alternative.** Keeping the parent palette as a personal signature
+across portfolio work. Defensible, and it would have cost one specific thing:
+the accent that carries the brand measures 2.58:1 on the dark ground, so it
+would have needed replacing on the instrument anyway. At that point the
+signature is a colour that only survives on half the pages.
+

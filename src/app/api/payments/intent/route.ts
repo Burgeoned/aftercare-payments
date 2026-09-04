@@ -9,6 +9,7 @@ import { STATEMENT_DESCRIPTOR } from "@/lib/domain/fixtures";
 import {
   appendPayment,
   findStatementById,
+  indexPayment,
   paymentsForStatement,
   refundsForPayments,
 } from "@/lib/domain/store";
@@ -162,6 +163,17 @@ export async function POST(request: Request): Promise<NextResponse> {
    * written now there is nothing to attach it to. It is not evidence that money
    * moved, and `deriveBalance` counts only succeeded payments.
    */
+  /**
+   * `updatedAt` is the processor's clock, never ours. types.ts is explicit
+   * about this and the first version of this route ignored it, which made the
+   * webhook handler reject every genuine event as out of order: it was
+   * comparing our request time against Hyperswitch's resource time.
+   *
+   * The epoch fallback reads as "no processor observation yet", so any real
+   * webhook supersedes it. A wall clock fallback would not, because our clock
+   * can run ahead of theirs.
+   */
+  const observedAt = created.updated ?? created.created ?? "1970-01-01T00:00:00.000Z";
   const now = new Date().toISOString();
   const payment: Payment = {
     id: randomUUID(),
@@ -173,9 +185,16 @@ export async function POST(request: Request): Promise<NextResponse> {
     tender: null,
     failureReason: null,
     createdAt: now,
-    updatedAt: now,
+    updatedAt: observedAt,
   };
   await appendPayment(payment);
+
+  /**
+   * Written before the patient can confirm, because the webhook may arrive
+   * before this request has even returned. Without the index the webhook has a
+   * processor payment id and no way to reach the statement it belongs to.
+   */
+  await indexPayment(created.payment_id, statement.id);
 
   return NextResponse.json({
     paymentId: payment.id,

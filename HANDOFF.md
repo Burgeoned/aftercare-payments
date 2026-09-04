@@ -131,10 +131,27 @@ One thing learned here that the next steps depend on:
   See D-015. Any future endpoint that takes money should take a portion or a
   server-known quantity, never a number from a client.
 
-**5. Webhooks as source of truth.** Verify HMAC over the **raw** body, not the
-parsed JSON, or the signature will not match. Idempotent on `event_id`. Reject
-transitions whose `updated` is older than what is recorded. Statement status is
-derived from the payment log.
+**5. Webhooks as source of truth.** DONE, 2026-09-04. *Gate passed*, verified
+against the running application with real signatures:
+
+```
+3. unsigned webhook            401, balance unchanged
+4. verified payment_succeeded  applied, remaining 0, status paid
+5. replay, same event_id       duplicate, balance unchanged
+6. older updated, failed       stale, balance did not walk back
+```
+
+Signature is HMAC-SHA512 over the raw body in `x-webhook-signature-512`,
+verified before the JSON is parsed. Idempotent on `event_id` with a 24 hour
+claim, matching the retry window. Ordering compares the resource timestamp, and
+the balance fold applies the same comparison again at read time.
+
+One thing learned here that step 6 depends on:
+
+- **The intent record must carry the processor's clock.** It carried ours, and
+  every genuine webhook was rejected as stale. The create response does return
+  `updated`, confirmed live. See D-018. Any record that will later be compared
+  against a webhook has to be stamped from the same clock the webhook uses.
 *Gate: a payment marks the statement paid only after a verified webhook. Replaying
 a webhook changes nothing. An out-of-order webhook does not walk state backwards.*
 

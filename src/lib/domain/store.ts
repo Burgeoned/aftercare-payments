@@ -96,3 +96,48 @@ export async function appendPayment(payment: Payment): Promise<void> {
 export async function appendRefund(refund: Refund): Promise<void> {
   await redis().rpush(refundsKey(refund.paymentId), refund);
 }
+
+// ---------------------------------------------------------------------------
+// Correlation and idempotency
+// ---------------------------------------------------------------------------
+
+function indexKey(hyperswitchPaymentId: string): string {
+  return `aftercare:payment-index:${hyperswitchPaymentId}`;
+}
+
+function eventKey(eventId: string): string {
+  return `aftercare:webhook-event:${eventId}`;
+}
+
+/**
+ * A webhook carries the processor's payment id, and the ledger is keyed by
+ * statement, so without this there is no way to find the statement short of
+ * scanning every list. The payload does echo our `metadata.statement_ref`, but
+ * resolving our own ledger through a value the processor round-tripped means
+ * trusting the processor with our correlation. This index is ours.
+ */
+export async function indexPayment(
+  hyperswitchPaymentId: string,
+  statementId: string,
+): Promise<void> {
+  await redis().set(indexKey(hyperswitchPaymentId), statementId);
+}
+
+export async function statementForPayment(
+  hyperswitchPaymentId: string,
+): Promise<string | null> {
+  return await redis().get<string>(indexKey(hyperswitchPaymentId));
+}
+
+/**
+ * Records an event id, and reports whether it was new.
+ *
+ * Set-if-absent, so two concurrent deliveries of the same event cannot both see
+ * "new". The window is 24 hours because that is how long Hyperswitch retries a
+ * webhook it considers undelivered, so it is exactly as long as a duplicate can
+ * arrive.
+ */
+export async function claimEvent(eventId: string): Promise<boolean> {
+  const result = await redis().set(eventKey(eventId), Date.now(), { nx: true, ex: 86_400 });
+  return result === "OK";
+}

@@ -39,6 +39,17 @@ export interface HyperswitchPayment {
   readonly amount: number;
   readonly currency: string;
   readonly profile_id?: string;
+  /**
+   * The processor's own clock. Confirmed present on a live sandbox response
+   * alongside `created`, `modified_at` and `expires_on`.
+   *
+   * It matters because `updated` is the field a webhook later carries for the
+   * same payment, so recording it here means ordering compares two readings of
+   * one clock. Recording our own wall clock instead made every webhook look
+   * stale, which is exactly the bug this field exists to prevent.
+   */
+  readonly updated?: string;
+  readonly created?: string;
 }
 
 export class HyperswitchError extends Error {

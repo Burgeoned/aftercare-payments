@@ -509,3 +509,53 @@ The fold collapses observations of one payment, never two payments.
 one and it is not self-executing. Append-only means the read side carries the
 interpretation, and this is the interpretation. A log without a fold rule is not
 a ledger, it is a list.
+
+---
+
+## D-018: the intent record carries the processor's clock, not ours
+
+Date: 2026-09-04
+
+**Defect, found by the step 5 gate on its first run.** A correctly signed
+`payment_succeeded` webhook was rejected as stale and the statement stayed
+unpaid:
+
+```
+4. verified payment_succeeded
+  outcome   {"outcome":"stale","received":"...T13:00:00Z","recorded":"...T19:39:46Z"}
+  balance   {"remaining":3270,"status":"payment_pending"}
+```
+
+The intent route wrote `updatedAt: new Date().toISOString()` on the record it
+creates at intent time. The webhook handler then compared that against the
+`updated` field from the payload, which is Hyperswitch's clock. Two different
+clocks, compared as if they were one.
+
+`types.ts` is explicit that this field is the "processor timestamp from the
+webhook payload, not our clock". The contract said the right thing and the
+implementation ignored it.
+
+**Decision.** The create response carries the processor's own timestamps, which
+was confirmed against a live sandbox payment rather than assumed:
+
+```
+created=2026-09-04T19:39:48.150Z  modified_at=...187Z
+updated=2026-09-04T19:39:48.187Z  expires_on=...
+```
+
+`updated` is the same field a webhook later carries for that payment, so the
+intent record now stores it and ordering compares two readings of one clock.
+The fallback when neither `updated` nor `created` is present is the epoch, which
+reads as "no processor observation yet" and is superseded by any real webhook. A
+wall clock fallback would not be, because our clock can run ahead of theirs.
+
+**Why this was not caught by a unit test.** Every ordering test constructs both
+records itself and is internally consistent by definition. The mismatch only
+exists where our clock meets theirs, which is the boundary a unit test replaces
+with a fixture. It took a real intent, a real signature, and a real comparison.
+
+**Second, smaller finding from the same run.** The gate initially reported every
+event as a duplicate because the script reused fixed event ids across runs and
+the idempotency claim holds for 24 hours. That was the deduplication working
+correctly on a test that was wrong, which is worth noting because it is the
+failure mode that looks most like a bug and is not.

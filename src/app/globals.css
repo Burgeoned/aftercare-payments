@@ -1,34 +1,456 @@
 @import "tailwindcss";
 
+/**
+ * Aftercare design system.
+ *
+ * Method taken from the YUNVO tools design system, brand deliberately not. The
+ * load-bearing rule is theirs: two grounds, and the ground tells you what kind
+ * of thing you are looking at.
+ *
+ *   Instrument (dark)   what you act on. The balance, and paying it.
+ *   Document   (cream)  what you read. The adjudication, line by line.
+ *
+ * A medical statement genuinely is both, which is why one flat ground made
+ * every page read as a form. The patient wants the number, then the reason.
+ *
+ * The typeface changes with the ground. A grotesque on the instrument because
+ * it is a control surface and a figure read off a panel; a serif on the
+ * document because an explanation of benefits is a document and reads as one.
+ *
+ * Every ratio in this file is measured, not estimated. See docs/DESIGN-SYSTEM.md.
+ */
+
 :root {
-  --background: #fbfbfa;
-  --foreground: #1c1c1a;
-  --muted: #6b6b66;
-  --line: #e4e4e0;
-  --accent: #1f5f4f;
+  /* Instrument ground -------------------------------------------------- */
+  --d-ground: #0e0e0e;
+  --d-panel: #131313;
+  --d-raised: #161616;
+  --d-feature: #1a1a1a;
+  --d-rule: rgba(245, 242, 236, 0.13);
+  --d-hairline: rgba(245, 242, 236, 0.07);
+  --d-text: #f5f2ec;                      /* 17.28:1 */
+  --d-text-2: rgba(245, 242, 236, 0.68);  /*  8.23:1 */
+  --d-text-3: rgba(245, 242, 236, 0.52);  /*  5.23:1, the floor for small text */
+
+  /* Document ground ---------------------------------------------------- */
+  --l-ground: #f5f2ec;
+  --l-raised: #ffffff;
+  --l-recessed: #eae6de;
+  --l-rule: rgba(26, 26, 26, 0.12);
+  --l-text: #1a1a1a;                      /* 15.58:1 */
+  --l-text-2: rgba(26, 26, 26, 0.62);     /*  4.69:1 */
+
+  /**
+   * The accent needs one hex per ground. The single accent this app started
+   * with reads correctly on cream at 6.69:1 and fails outright on the dark
+   * ground at 2.58:1, which is why its dark areas looked muddy.
+   */
+  --accent-dark: #6fb39a;                 /*  7.90:1 on --d-ground */
+  --accent-light: #1f5f4f;                /*  6.69:1 on --l-ground */
+
+  /**
+   * Semantic only. Terracotta means "your plan did not cover this". Green means
+   * money already collected. Neither is ever used for emphasis, a border, or a
+   * hover state. A colour here appearing without that meaning is a bug.
+   */
+  --warn-dark: #d99a78;                   /*  8.13:1 */
+  --warn-light: #9a4a2c;                  /*  5.54:1, terracotta itself is 2.91 on cream */
+  --paid-dark: #7dbb9c;                   /*  8.70:1 */
+  --paid-light: #2f6b52;                  /*  5.62:1 */
+
+  /* Type scale --------------------------------------------------------- */
+  --fs-answer: clamp(3rem, 10vw, 4.75rem);
+  --fs-hero: clamp(1.75rem, 5vw, 2.4rem);
+  --fs-section: 1.15rem;
+  --fs-figure: 1.35rem;
+  --fs-body: 0.95rem;
+  --fs-small: 0.84rem;
+  --fs-micro: 0.72rem;
+
+  /* Rhythm ------------------------------------------------------------- */
+  --gap-section: 52px;
+  --pad-panel: 24px;
+  --gap-field: 22px;
+  --gap-label: 7px;
+  --measure: 62ch;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #16171a;
-    --foreground: #ededea;
-    --muted: #9a9a94;
-    --line: #2c2e33;
-    --accent: #58a58c;
-  }
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --color-muted: var(--muted);
-  --color-line: var(--line);
-  --color-accent: var(--accent);
+/**
+ * Radius is zero everywhere. A statement is a printed document and a payment is
+ * an instrument. Neither is a consumer app card.
+ */
+* {
+  border-radius: 0;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  margin: 0;
+  background: var(--l-ground);
+  color: var(--l-text);
+  font-family: var(--font-document), Georgia, serif;
+  font-size: var(--fs-body);
+  line-height: 1.65;
   -webkit-font-smoothing: antialiased;
+}
+
+/* --------------------------------------------------------------------- */
+/* Grounds                                                                */
+/* --------------------------------------------------------------------- */
+
+.instrument {
+  background: var(--d-ground);
+  color: var(--d-text);
+  font-family: var(--font-instrument), ui-sans-serif, system-ui, sans-serif;
+}
+
+.instrument a {
+  color: var(--accent-dark);
+}
+
+.document {
+  background: var(--l-ground);
+  color: var(--l-text);
+}
+
+.document a {
+  color: var(--accent-light);
+}
+
+.wrap {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 0 1.5rem;
+}
+
+@media (min-width: 760px) {
+  .wrap {
+    padding: 0 clamp(2rem, 5vw, 4rem);
+  }
+}
+
+.wrap-narrow {
+  max-width: 34rem;
+}
+
+.stack {
+  display: grid;
+  gap: var(--gap-section);
+}
+
+/* --------------------------------------------------------------------- */
+/* Type                                                                   */
+/* --------------------------------------------------------------------- */
+
+.eyebrow {
+  font-family: var(--font-instrument), ui-sans-serif, system-ui, sans-serif;
+  font-size: var(--fs-micro);
+  font-weight: 500;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  margin: 0;
+  color: var(--accent-light);
+}
+
+.instrument .eyebrow {
+  color: var(--accent-dark);
+}
+
+.hero-title {
+  font-size: var(--fs-hero);
+  font-weight: 600;
+  line-height: 1.12;
+  letter-spacing: -0.02em;
+  margin: 0;
+}
+
+/**
+ * The answer. One per page, and on a statement it is always the same thing:
+ * what the patient owes. Tabular figures so a digit change does not reflow it.
+ */
+.answer {
+  font-family: var(--font-instrument), ui-sans-serif, system-ui, sans-serif;
+  font-size: var(--fs-answer);
+  font-weight: 600;
+  line-height: 0.95;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+  margin: 0;
+}
+
+/**
+ * The mixed headline. YUNVO pairs a condensed display face with an italic
+ * serif second line; this is the same structure carried by the two families
+ * already in use here, so the headline states the instrument-and-document
+ * thesis before any content does.
+ */
+.mixed em {
+  display: block;
+  font-family: var(--font-document), Georgia, serif;
+  font-style: italic;
+  font-weight: 400;
+  letter-spacing: -0.01em;
+  text-transform: none;
+  color: var(--accent-light);
+}
+
+.instrument .mixed em {
+  color: var(--accent-dark);
+}
+
+.section-title {
+  font-size: var(--fs-section);
+  font-weight: 600;
+  line-height: 1.25;
+  margin: 0;
+}
+
+.lede {
+  max-width: var(--measure);
+  margin: 0;
+}
+
+.muted {
+  color: var(--l-text-2);
+}
+
+.instrument .muted {
+  color: var(--d-text-2);
+}
+
+.hint {
+  font-size: var(--fs-small);
+  color: var(--l-text-2);
+}
+
+.instrument .hint {
+  color: var(--d-text-3);
+}
+
+.num {
+  font-family: var(--font-instrument), ui-sans-serif, system-ui, sans-serif;
+  font-variant-numeric: tabular-nums;
+}
+
+/* --------------------------------------------------------------------- */
+/* Surfaces                                                               */
+/* --------------------------------------------------------------------- */
+
+.panel {
+  background: var(--d-panel);
+  border: 1px solid var(--d-hairline);
+  padding: var(--pad-panel);
+}
+
+.card {
+  background: var(--l-raised);
+  border: 1px solid var(--l-rule);
+}
+
+.rule-top {
+  border-top: 1px solid var(--l-rule);
+}
+
+.instrument .rule-top {
+  border-top-color: var(--d-rule);
+}
+
+.note {
+  border-left: 2px solid var(--accent-light);
+  padding-left: 1rem;
+  font-size: var(--fs-small);
+  color: var(--l-text-2);
+}
+
+.note-warn {
+  border-left-color: var(--warn-light);
+}
+
+.instrument .note {
+  border-left-color: var(--accent-dark);
+  color: var(--d-text-2);
+}
+
+.instrument .note-warn {
+  border-left-color: var(--warn-dark);
+}
+
+/* --------------------------------------------------------------------- */
+/* Controls                                                               */
+/* --------------------------------------------------------------------- */
+
+.field {
+  display: block;
+  margin-bottom: var(--gap-field);
+}
+
+.field > label {
+  display: block;
+  margin-bottom: var(--gap-label);
+  font-size: var(--fs-small);
+  font-weight: 600;
+}
+
+.input {
+  width: 100%;
+  padding: 0.7rem 0.8rem;
+  font: inherit;
+  font-size: var(--fs-body);
+  background: var(--l-raised);
+  color: var(--l-text);
+  border: 1px solid rgba(26, 26, 26, 0.28);
+}
+
+.input:focus-visible {
+  outline: 2px solid var(--accent-light);
+  outline-offset: -1px;
+}
+
+.instrument .input {
+  background: var(--d-ground);
+  color: var(--d-text);
+  border-color: var(--d-rule);
+}
+
+.instrument .input:focus-visible {
+  outline-color: var(--accent-dark);
+}
+
+.btn {
+  display: inline-block;
+  width: 100%;
+  padding: 0.85rem 1.2rem;
+  font-family: var(--font-instrument), ui-sans-serif, system-ui, sans-serif;
+  font-size: var(--fs-small);
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  text-align: center;
+  cursor: pointer;
+  border: 1px solid transparent;
+  background: var(--accent-light);
+  color: var(--l-raised);
+}
+
+.instrument .btn {
+  background: var(--accent-dark);
+  color: var(--d-ground);
+}
+
+.btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.btn-quiet {
+  background: transparent;
+  color: var(--l-text);
+  border-color: rgba(26, 26, 26, 0.28);
+}
+
+.instrument .btn-quiet {
+  background: transparent;
+  color: var(--d-text);
+  border-color: var(--d-rule);
+}
+
+/* --------------------------------------------------------------------- */
+/* The statement table                                                    */
+/* --------------------------------------------------------------------- */
+
+.table-wrap {
+  overflow-x: auto;
+}
+
+.table {
+  width: 100%;
+  min-width: 34rem;
+  border-collapse: collapse;
+  font-size: var(--fs-small);
+}
+
+.table thead th {
+  background: var(--l-recessed);
+  font-family: var(--font-instrument), ui-sans-serif, system-ui, sans-serif;
+  font-size: var(--fs-micro);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-align: left;
+  padding: 0.6rem 0.9rem;
+  white-space: nowrap;
+}
+
+.table th.n,
+.table td.n {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-family: var(--font-instrument), ui-sans-serif, system-ui, sans-serif;
+}
+
+.table td {
+  padding: 0.85rem 0.9rem;
+  border-top: 1px solid var(--l-rule);
+  vertical-align: baseline;
+}
+
+.table tbody tr:first-child td {
+  border-top: none;
+}
+
+/** Marks a line the plan did not cover. Semantic, per the palette rules. */
+.flag-warn {
+  display: inline-block;
+  margin-left: 0.5rem;
+  font-family: var(--font-instrument), ui-sans-serif, system-ui, sans-serif;
+  font-size: var(--fs-micro);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--warn-light);
+  border: 1px solid currentColor;
+  padding: 0.08rem 0.35rem;
+  white-space: nowrap;
+}
+
+/* --------------------------------------------------------------------- */
+/* Summary ledger                                                         */
+/* --------------------------------------------------------------------- */
+
+.ledger {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.ledger-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1.5rem;
+  font-size: var(--fs-small);
+}
+
+.ledger-row > span:last-child {
+  font-family: var(--font-instrument), ui-sans-serif, system-ui, sans-serif;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.ledger-total {
+  margin-top: 0.4rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--l-rule);
+  font-size: var(--fs-figure);
+  font-weight: 600;
+}
+
+.instrument .ledger-total {
+  border-top-color: var(--d-rule);
+}
+
+.paid-mark {
+  color: var(--paid-light);
+}
+
+.instrument .paid-mark {
+  color: var(--paid-dark);
 }

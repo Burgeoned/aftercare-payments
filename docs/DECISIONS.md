@@ -344,3 +344,38 @@ falsified. The reasoning in section 12 was sound for the case it considered and
 wrong about the case it did not, and it is recorded that way rather than quietly
 corrected.
 
+---
+
+## D-014: no fallback for the application's own public URL
+
+Date: 2026-09-03
+
+**Defect, found by paying on the deployed site.** `/pay` built the 3DS return
+URL as:
+
+```ts
+const appUrl = process.env["NEXT_PUBLIC_APP_URL"] ?? "http://localhost:3000";
+```
+
+A real sandbox payment on the Vercel deployment succeeded and returned the
+patient to `http://localhost:3000/pay/return`, which does not resolve on their
+machine. Payment id `pay_mm7pB87qWfz9tSA8BMN4`, status `succeeded`. The money
+moved and the patient saw a browser error page.
+
+**Decision.** The page reads `serverEnv().appUrl`, which is validated and has no
+default. A missing variable now produces a readable error on the page that needs
+it, before a payment is attempted.
+
+**Why this is worth an entry rather than a quiet fix.** The fallback was written
+for local development convenience and it worked perfectly there, which is
+exactly why it survived to production. A default for the application's own
+public URL cannot be correct anywhere except the one machine it names, so it can
+only ever convert a loud configuration error into a silent one. The failure it
+produced is the worst shape available in payments: the charge succeeds and the
+confirmation is lost, so the patient does not know whether they paid and the
+provider gets a support call about a payment that actually worked.
+
+**Related.** The same reasoning applies to the redirect generally, which is why
+`/pay/return` refuses to assert success. See D-006. The redirect being broken
+here changed nothing about the money, and under the design it should not: build
+step 5 makes the webhook the thing that records the payment.

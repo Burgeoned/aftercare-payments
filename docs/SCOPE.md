@@ -146,6 +146,24 @@ because it is where the fixture data in this prototype would actually come from,
 and because the shape of `LineItem` in `DESIGN.md` section 12 was chosen to match
 what an 835 provides rather than invented.
 
+### 9. Rate limiting on statement lookup
+
+**What it is.** A limit on how many reference and date of birth combinations one
+caller may try.
+
+**Why deferred.** Found during the build rather than predicted, and it is
+infrastructure rather than payments. It is listed because it is the one gap in
+this prototype that would matter on the first day of real traffic, not because
+it was a considered omission.
+
+**How it would be built.** Two counters, one per source address and one per
+statement reference, with the per-reference counter mattering more: an attacker
+distributing an attack across addresses is still funnelling it at one statement.
+On Vercel this needs the same shared store that the payment log needs, see
+`DECISIONS.md` D-013, which is a good reason to solve both at once. The
+public payment page is also a card testing target independently of lookup, which
+build step 7 addresses in the Hyperswitch dashboard rather than here.
+
 ## The general principle
 
 Everything built exercises something specific about payments in this vertical.

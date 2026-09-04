@@ -260,3 +260,87 @@ prompt boundary was a clean enough cut.
 free, but it discards the reasoning behind every decision in this log, which is
 the part worth reading.
 
+---
+
+## D-012: statement lookup is a POST, not a GET
+
+Date: 2026-09-03
+
+**Decision.** `POST /api/statements/lookup` with the reference and date of birth
+in the body, replacing the `GET /api/statements/:ref` in `DESIGN.md` section 13.
+
+**Why.** The credential includes a date of birth. A GET puts it in the URL, and
+a URL is written to browser history, sent in the Referer header of every
+subsequent request, and recorded in the access log of every proxy between the
+patient and the application. None of those are places a date of birth attached
+to a medical bill belongs. The design specified a GET because section 13 was
+written as a list of resources before the credential was decided.
+
+A successful lookup returns a signed httpOnly cookie scoped to one statement, so
+the date of birth travels once. The statement page reads the cookie. Nothing
+identifying appears in a URL at any point in the flow.
+
+**Also decided here, and it is a real cost.** A missing statement and a wrong
+date of birth return the identical error. Distinguishing them turns the endpoint
+into an oracle for which statement references exist, and a valid reference is
+most of what an attacker needs. The patient-facing message is correspondingly
+vague, which will confuse somebody who mistyped their own date of birth.
+
+**Not built, and it should be before this is public.** Rate limiting per address
+and per reference. Both halves of this credential are guessable given enough
+attempts and nothing currently slows an attacker down. Added to `SCOPE.md`.
+
+---
+
+## D-013: in-memory state does not survive a Next module boundary
+
+Date: 2026-09-03
+
+**Measured, not assumed.** `DESIGN.md` section 12 chose in-memory fixtures with
+no database, on the grounds that the interesting complexity is in the payment
+state machine and a database adds operational surface without adding an insight
+about payments. That argument still holds for the fixtures. It does not hold for
+anything mutable.
+
+Guest access grants were held in a `Map` in module scope. The lookup route
+handler wrote a grant, the statement page read it, and the page never found it.
+Instrumenting the module with a random per-instance id showed why:
+
+```
+[diag] store module instantiated 19n386
+[diag] grantAccess in 19n386 token 88c108cf
+[diag] store module instantiated fs3ykd
+[diag] resolveAccess in fs3ykd known 0 token 88c108cf
+```
+
+Next instantiates a module separately per layer. A route handler and a page
+importing the same file get different copies of its module state, in the same
+process, on one machine. Next names the two layers in its own error output,
+which is the clearest confirmation available:
+
+```
+The export allRefunds was not found in module .../store.ts [app-route]
+The export allRefunds was not found in module .../store.ts [app-rsc]
+```
+
+One file, two compiled modules, two sets of module state. Vercel does not cause this and does make it worse,
+because separate serverless instances share nothing at all.
+
+**Resolved for access grants.** They are now stateless signed tokens in
+`src/lib/access.ts`, HMAC-SHA256 over the statement id and an expiry, keyed on a
+new `AFTERCARE_SESSION_SECRET`. A token carries its own claim, so it is correct
+across module instances, serverless instances, and redeploys. The cost is that a
+token cannot be revoked before it expires, which is why the window is thirty
+minutes and it grants exactly one thing: viewing one statement.
+
+**Unresolved for the payment log, and it blocks build step 5.** Nothing writes
+to the payment log yet, so the defect is latent rather than active. It stops
+being latent the moment a webhook has to write a payment status that a statement
+page then reads. "Webhooks are the source of truth" does not survive a source of
+truth that is per module instance.
+
+**Worth stating plainly.** This is a design assumption that building the thing
+falsified. The reasoning in section 12 was sound for the case it considered and
+wrong about the case it did not, and it is recorded that way rather than quietly
+corrected.
+

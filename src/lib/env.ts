@@ -42,6 +42,12 @@ export interface ServerEnv {
   readonly hyperswitchBaseUrl: string;
   readonly hyperswitchProfileId: string;
   readonly hyperswitchWebhookSecret: string;
+  /**
+   * Signs guest statement access cookies. Separate from the webhook secret on
+   * purpose: a key that authenticates a processor should not also mint session
+   * tokens, because compromising either one should not hand over the other.
+   */
+  readonly sessionSecret: string;
   readonly appUrl: string;
 }
 
@@ -60,6 +66,7 @@ export function serverEnv(): ServerEnv {
     "HYPERSWITCH_BASE_URL",
     "HYPERSWITCH_PROFILE_ID",
     "HYPERSWITCH_WEBHOOK_SECRET",
+    "AFTERCARE_SESSION_SECRET",
     "NEXT_PUBLIC_APP_URL",
   ]);
 
@@ -68,10 +75,47 @@ export function serverEnv(): ServerEnv {
     hyperswitchBaseUrl: v["HYPERSWITCH_BASE_URL"]!.replace(/\/+$/, ""),
     hyperswitchProfileId: v["HYPERSWITCH_PROFILE_ID"]!,
     hyperswitchWebhookSecret: v["HYPERSWITCH_WEBHOOK_SECRET"]!,
+    sessionSecret: v["AFTERCARE_SESSION_SECRET"]!,
     appUrl: v["NEXT_PUBLIC_APP_URL"]!.replace(/\/+$/, ""),
   };
 
   return cached;
+}
+
+export interface StoreEnv {
+  readonly redisUrl: string;
+  readonly redisToken: string;
+}
+
+let cachedStore: StoreEnv | null = null;
+
+/**
+ * Validated separately from `serverEnv` on purpose. The payment log and the
+ * Hyperswitch credentials are different concerns, and a missing Redis
+ * configuration should break the ledger rather than the whole application.
+ *
+ * The names are the Vercel Upstash integration's own, which are `KV_` prefixed
+ * for historical reasons rather than `UPSTASH_`. Reading what the integration
+ * writes means the values rotate with it. Copying them into differently named
+ * variables would work exactly until the first token rotation, and then fail
+ * with credentials that look present and correct.
+ *
+ * `KV_REST_API_READ_ONLY_TOKEN` is deliberately not used: this store appends.
+ * `KV_URL` and `REDIS_URL` are TCP connection strings for a socket client, and
+ * this is the REST client, which suits a serverless caller that cannot hold a
+ * connection open between invocations.
+ */
+export function storeEnv(): StoreEnv {
+  if (cachedStore !== null) return cachedStore;
+
+  const v = require_(["KV_REST_API_URL", "KV_REST_API_TOKEN"]);
+
+  cachedStore = {
+    redisUrl: v["KV_REST_API_URL"]!,
+    redisToken: v["KV_REST_API_TOKEN"]!,
+  };
+
+  return cachedStore;
 }
 
 /**

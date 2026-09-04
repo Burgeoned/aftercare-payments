@@ -93,12 +93,24 @@ Two things learned here that the next steps depend on:
   Apple Pay does not appear. Retest both on the Vercel URL before concluding
   anything about them.
 
-**3. Fixtures and statement lookup.** Implement against `types.ts`. Two or three
-statements with realistic adjudication data: charged, allowed, payer paid,
-patient owes. One statement large enough to be a payment plan candidate, one with
-mixed health-account-eligible and ineligible lines. Guest lookup by statement ref
-plus date of birth, no account creation.
-*Gate: a statement renders with a comprehensible payer adjustment breakdown.*
+**3. Fixtures and statement lookup.** DONE, 2026-09-03. Three statements, all
+reconciling `allowed = payerPaid + patientOwes` under test: a $32.70 routine
+visit, a $927.00 statement mixing health-account-eligible imaging with a
+non-covered cosmetic line, and a $1,639.00 surgical balance standing in as the
+payment plan candidate. Guest lookup by reference plus date of birth, no account,
+with a missing reference and a wrong date of birth returning the same error so
+the endpoint is not an oracle for valid references. *Gate passed:* the breakdown
+renders billed, plan rate, plan paid, and patient residual per line.
+
+Two things learned here that the next steps depend on:
+
+- Lookup had to become a POST. A GET carrying a date of birth puts it in browser
+  history, the Referer header, and every proxy log in between. See D-012.
+- **In-memory mutable state does not survive a Next module boundary.** A route
+  handler and a page importing the same module get different copies of its state
+  in one process. Access grants are now stateless signed tokens, but the payment
+  log has the same problem and it is unsolved. Step 5 cannot work until it is.
+  See D-013. Resolve this before starting step 5, not during it.
 
 **4. Real payment against a real statement.** `POST /api/payments/intent` creates
 the Hyperswitch payment and returns `client_secret`. Browser confirms directly

@@ -305,7 +305,7 @@ shape of the data rather than by discipline.
 ## 13. Internal API surface
 
 ```
-GET  /api/statements/:ref            lookup by statement ref + DOB
+POST /api/statements/lookup          lookup by statement ref + DOB
 POST /api/payments/intent            create Hyperswitch payment, return client_secret
 GET  /api/payments/:id               poll status, used only by the return page
 POST /api/webhooks/hyperswitch       verified webhook sink, source of truth
@@ -314,6 +314,14 @@ POST /api/provider/readjudicate      simulate payer correction, issue partial re
 
 Five routes. The `intent` route is the only one that talks to Hyperswitch on the
 happy path, because confirmation happens browser to Hyperswitch directly.
+
+Statement lookup is a POST rather than the `GET /api/statements/:ref` this
+section originally specified. A GET carrying a date of birth puts it in the URL,
+and a URL is written to browser history, sent in the Referer header of every
+subsequent request, and recorded in the access log of every proxy in between.
+The lookup returns a signed, httpOnly access cookie scoped to one statement, so
+the date of birth travels once and the statement page reads the cookie instead.
+See `DECISIONS.md` D-012.
 
 ## 14. Failure modes we handle
 
@@ -329,7 +337,10 @@ happy path, because confirmation happens browser to Hyperswitch directly.
 
 ## 15. Open questions
 
-1. Exact server auth header name, see section 11.
+1. ~~Exact server auth header name, see section 11.~~ Resolved: `api-key`
+   carrying the secret key, with the merchant account inferred from the key.
+   The path was resolved empirically rather than chosen, see `DECISIONS.md`
+   D-007.
 2. Whether ACH through the Stripe test connector supports a returned-payment
    simulation in sandbox. If not, ACH returns get described rather than
    demonstrated.

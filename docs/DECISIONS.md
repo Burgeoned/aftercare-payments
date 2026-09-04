@@ -203,3 +203,60 @@ keeps PCI scope at SAQ A. The isolation is the feature.
 
 **First successful payment.** `pay_iOpVKoaAvGIt6mEyaEe5`, $1.00, card, reached
 `succeeded` on 2026-08-30.
+
+---
+
+## D-010: tool results are not operator prompts
+
+Date: 2026-09-02
+
+**Defect, found while reviewing an export.** `scripts/export-session.mjs`
+counted every user-role message as a prompt. Claude Code returns tool results as
+user-role messages carrying `tool_result` blocks, so the exporter reported 151
+operator prompts for a session that actually had 17, and rendered every build
+log as its own numbered heading.
+
+**Fix.** A user-role message whose content is entirely `tool_result` blocks is
+attached to the assistant turn above it and not counted.
+
+**Why it matters more than a formatting bug.** The prompt count is the one
+number a reader of a shared session will draw a conclusion from, and the wrong
+number overstated hand direction by roughly ten times. The corrected figure is
+also the better one: 17 prompts produced the domain analysis, the design, the
+type contract, the scaffold, and a live sandbox payment.
+
+---
+
+## D-011: the design session's transcript is exported with --project and --from
+
+Date: 2026-09-02
+
+**Problem.** Claude Code files a transcript under the working directory the
+session ran in, not the repo it produced. The session that wrote `DOMAIN.md`,
+`DESIGN.md`, `types.ts`, the scaffold, and D-001 through D-009 ran from
+`~/dev/job-hunt-lockin-2026`, so its transcript is filed there. Running
+`npm run export-sessions` in this repo found only the session that noticed the
+problem. The deliverable had no source material where the tool looked.
+
+**Decision.** The exporter takes `--project` to name another transcript
+directory and `--from` to begin at a given operator prompt. It prints a warning
+when reading outside this repo's directory, because the working-directory
+default is a safety property rather than a convenience.
+
+**Why `--from` rather than editing the file.** That session's first prompt
+carries job-hunt context that does not belong in a public repo, including
+compensation history and preparation notes for a different employer. Cutting it
+with a flag keeps the export reproducible and puts the cut in the header where a
+reader can see that something was withheld. Hand-trimming an exported transcript
+produces a file nobody can regenerate, which is the opposite of what sharing a
+session is supposed to demonstrate.
+
+**What the review found.** No live credentials. Every key-shaped string came
+through as `[REDACTED]`. The unrelated material was one contiguous block inside
+the first prompt rather than scattered through the session, which is why a
+prompt boundary was a clean enough cut.
+
+**Rejected alternative.** Exporting only sessions that ran in this repo. Safe and
+free, but it discards the reasoning behind every decision in this log, which is
+the part worth reading.
+

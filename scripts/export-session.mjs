@@ -16,9 +16,15 @@
  *      logs. What a reader wants is the conversation and which tools ran.
  *
  * Usage:
- *   node scripts/export-session.mjs              # all sessions for this repo
- *   node scripts/export-session.mjs --list       # list without writing
+ *   node scripts/export-session.mjs                        # this repo's sessions
+ *   node scripts/export-session.mjs --list                 # list without writing
  *   node scripts/export-session.mjs --out ai-sessions
+ *   node scripts/export-session.mjs --project <slug|path>  # another project's dir
+ *   node scripts/export-session.mjs --session <id-prefix>  # one session only
+ *
+ * `--project` exists because a transcript is filed under the working directory
+ * the session ran in, not the repo it produced. Work done on this repo from a
+ * different cwd lands where this script would otherwise never look.
  */
 
 import { readFileSync, readdirSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
@@ -84,7 +90,7 @@ function renderContent(content) {
   return parts.join("\n\n");
 }
 
-function convert(jsonlPath) {
+function convert(jsonlPath, fromPrompt = 1) {
   const lines = readFileSync(jsonlPath, "utf8").split(/\r?\n/).filter(Boolean);
 
   const out = [];
@@ -93,6 +99,10 @@ function convert(jsonlPath) {
   let turns = 0;
   let subagentTurns = 0;
   let inSubagent = false;
+  let included = 0;
+  // Everything before the first included prompt is dropped, responses and tool
+  // output with it, so a withheld prompt does not leave its answer behind.
+  let skipping = fromPrompt > 1;
 
   for (const line of lines) {
     let record;
@@ -112,6 +122,20 @@ function convert(jsonlPath) {
     if (!body) continue;
 
     /**
+     * A tool result comes back as a user-role message carrying only
+     * tool_result blocks. It is the harness replying to the model, not the
+     * operator talking. Counting these as prompts inflated the count by about
+     * ten times and turned every build log into a numbered heading, which
+     * overstates how much of the work was directed by hand. That is the one
+     * number a reader of this export is most likely to draw a conclusion from,
+     * so it has to be the real one.
+     */
+    const isToolResult =
+      Array.isArray(message.content) &&
+      message.content.length > 0 &&
+      message.content.every((block) => block.type === "tool_result");
+
+    /**
      * Subagent turns land in this same file flagged `isSidechain`. They are not
      * the operator talking, and rendering them inline as prompts makes the
      * transcript unreadable and overstates how much was directed by hand. They
@@ -129,43 +153,103 @@ function convert(jsonlPath) {
     }
 
     if (message.role === "user") {
-      if (isSide) {
-        subagentTurns += 1;
-        out.push(`\n**Subagent prompt**\n\n${body}`);
+      if (isToolResult) {
+        // Belongs to the assistant turn above it, not to a new prompt.
+        if (!skipping) out.push(`\n${body}`);
+      } else if (isSide) {
+        if (!skipping) {
+          subagentTurns += 1;
+          out.push(`\n**Subagent prompt**\n\n${body}`);
+        }
       } else {
         turns += 1;
-        out.push(`\n---\n\n### ${turns}. Prompt\n\n${body}`);
+        skipping = turns < fromPrompt;
+        if (!skipping) {
+          included += 1;
+          // Numbering follows the original session, not this export, so a
+          // reader can see that prompts were withheld rather than renumbered.
+          out.push(`\n---\n\n### ${turns}. Prompt\n\n${body}`);
+        }
       }
     } else if (message.role === "assistant") {
-      out.push(`\n**${isSide ? "Subagent response" : "Response"}**\n\n${body}`);
+      if (!skipping) out.push(`\n**${isSide ? "Subagent response" : "Response"}**\n\n${body}`);
     }
   }
 
   if (inSubagent) out.push(`\n</blockquote>\n`);
+
+  const withheld =
+    fromPrompt > 1
+      ? [
+          `- Prompts 1 to ${fromPrompt - 1} withheld from this export`,
+          "",
+          "This session ran from a different working directory and its opening",
+          "prompts carry context unrelated to this repo. They are cut with the",
+          "exporter's `--from` flag rather than edited out of the file by hand,",
+          "so the export stays reproducible and the cut stays visible.",
+        ]
+      : [];
 
   const header = [
     `# Session ${jsonlPath.split(/[\\/]/).pop().replace(".jsonl", "")}`,
     "",
     `- Started: ${started ?? "unknown"}`,
     `- Branch: ${branch ?? "unknown"}`,
-    `- Operator prompts: ${turns}`,
+    `- Operator prompts: ${included}${fromPrompt > 1 ? ` of ${turns}` : ""}`,
     `- Subagent turns: ${subagentTurns}`,
+    ...withheld,
     "",
     "Exported by `scripts/export-session.mjs`. Tool output is truncated and",
     "credential-shaped strings are redacted. Subagent threads are quoted blocks",
     "and counted separately, because they are delegated work rather than",
-    "direction given by hand.",
+    "direction given by hand. Tool results are not counted as prompts: they are",
+    "the harness replying to the model, not the operator.",
   ].join("\n");
 
-  return { markdown: `${header}\n${out.join("\n")}\n`, turns, subagentTurns, started };
+  return { markdown: `${header}\n${out.join("\n")}\n`, turns: included, subagentTurns, started };
 }
 
 const args = process.argv.slice(2);
 const listOnly = args.includes("--list");
-const outIdx = args.indexOf("--out");
-const outDir = outIdx !== -1 ? args[outIdx + 1] : "ai-sessions";
 
-const projectDir = join(homedir(), ".claude", "projects", projectSlug(process.cwd()));
+function flag(name) {
+  const i = args.indexOf(name);
+  return i !== -1 ? args[i + 1] : undefined;
+}
+
+const outDir = flag("--out") ?? "ai-sessions";
+const projectArg = flag("--project");
+const sessionArg = flag("--session");
+// Cuts the export at an operator prompt boundary. Used when a session's
+// opening prompts carry context that does not belong in a shared repo.
+const fromPrompt = Number(flag("--from") ?? 1);
+
+if (!Number.isInteger(fromPrompt) || fromPrompt < 1) {
+  console.error(`--from takes a positive integer prompt number, got "${flag("--from")}"`);
+  process.exit(1);
+}
+
+const PROJECTS_ROOT = join(homedir(), ".claude", "projects");
+
+/**
+ * Accepts a slug as Claude Code files it, a repo path to slugify, or a literal
+ * directory of .jsonl files. Tried in that order, so passing a repo path
+ * resolves to that repo's transcripts rather than to the repo itself.
+ */
+function resolveProjectDir(arg) {
+  if (arg === undefined) return join(PROJECTS_ROOT, projectSlug(process.cwd()));
+
+  const asSlug = join(PROJECTS_ROOT, arg);
+  if (existsSync(asSlug)) return asSlug;
+
+  const slugified = join(PROJECTS_ROOT, projectSlug(arg));
+  if (existsSync(slugified)) return slugified;
+
+  return arg;
+}
+
+const defaultDir = join(PROJECTS_ROOT, projectSlug(process.cwd()));
+const projectDir = resolveProjectDir(projectArg);
 
 if (!existsSync(projectDir)) {
   console.error(
@@ -176,9 +260,29 @@ if (!existsSync(projectDir)) {
   process.exit(1);
 }
 
-const files = readdirSync(projectDir).filter((f) => f.endsWith(".jsonl"));
+// The cwd default is a safety property: it makes it impossible to export a
+// session that ran on some other project. Overriding it gives that up, so it
+// says so rather than doing it quietly.
+if (resolve(projectDir) !== resolve(defaultDir)) {
+  console.warn(
+    `\n  WARNING: exporting from another project's transcript directory.\n` +
+      `  ${projectDir}\n` +
+      `  Sessions filed there may contain work unrelated to this repo. Export\n` +
+      `  outside the repo with --out, read every file, and only then commit.\n`,
+  );
+}
+
+let files = readdirSync(projectDir).filter((f) => f.endsWith(".jsonl"));
+if (sessionArg !== undefined) {
+  files = files.filter((f) => f.startsWith(sessionArg));
+}
+
 if (files.length === 0) {
-  console.error(`No .jsonl transcripts in ${projectDir}`);
+  console.error(
+    sessionArg !== undefined
+      ? `No transcript in ${projectDir} starting with "${sessionArg}"`
+      : `No .jsonl transcripts in ${projectDir}`,
+  );
   process.exit(1);
 }
 
@@ -187,7 +291,7 @@ if (!listOnly) mkdirSync(outDir, { recursive: true });
 console.log(`\nTranscripts in ${projectDir}\n`);
 
 for (const file of files.sort()) {
-  const { markdown, turns, subagentTurns, started } = convert(join(projectDir, file));
+  const { markdown, turns, subagentTurns, started } = convert(join(projectDir, file), fromPrompt);
   const name = `session-${file.replace(".jsonl", "").slice(0, 8)}.md`;
 
   if (listOnly) {

@@ -559,3 +559,76 @@ event as a duplicate because the script reused fixed event ids across runs and
 the idempotency claim holds for 24 hours. That was the deduplication working
 correctly on a test that was wrong, which is worth noting because it is the
 failure mode that looks most like a bug and is not.
+
+---
+
+## D-019: date of birth is three text fields, not a picker
+
+Date: 2026-09-04
+
+**Decision.** The lookup form takes month, day and year as three short numeric
+text inputs. Not a native date input, not dropdowns, not a calendar.
+
+**Why not a calendar.** A date picker is built for choosing a date near today.
+A date of birth is decades away, so the patient pages backwards through a grid
+forty or sixty times. The control is optimised for the opposite of this task.
+
+**Why not the native date input.** `<input type="date">` renders as a segmented
+`mm/dd/yyyy` field that has to be driven segment by segment, and its behaviour
+differs across browsers and platforms. It was what this form used, and it was
+the first thing anyone complained about.
+
+**Why not dropdowns.** A year select for a date of birth is a hundred item list,
+and it trades typing four digits for scrolling.
+
+**Why three text fields.** It is the pattern for a date somebody knows from
+memory, and it is what the GOV.UK design system uses for exactly this case. The
+patient types what they would say out loud.
+
+**Details that matter more than they look.** `inputMode="numeric"` rather than
+`type="number"`, because a number input strips leading zeros, so a January
+birthday typed as `01` becomes `1`, and it adds spinners to a field where
+incrementing a month is meaningless. Autofill hints are `bday-month`,
+`bday-day`, `bday-year`. Focus advances only when a field is unambiguously
+full, so a patient typing `1` for January is not thrown into the next box
+before they can type the `2` of `12`.
+
+**Validated in the browser, on purpose.** The server returns the same
+deliberately vague error for a wrong date and a missing statement, per D-012, so
+without client-side validation a patient who typed month 13 is told "no
+statement matches that reference and date of birth" and has no way to tell a
+typo from a wrong record. `31 April` is rejected rather than silently rolled
+forward into `1 May`, which is what `Date` does with it.
+
+---
+
+## D-020: the receipt is derived from the ledger, and the return page waits for it
+
+Date: 2026-09-04
+
+**Decision.** `/statement/:ref/receipt` renders the settled payments and refunds
+on a statement, folded exactly the way the balance folds them. `/pay/return`
+polls the derived status on a bounded schedule and sends the patient to the
+receipt once the ledger has actually moved.
+
+**Why the same fold.** A receipt built from a different view of the log than the
+balance is how a patient ends up holding a receipt that does not reconcile with
+what they were charged. `settledActivity` and `deriveBalance` read the same
+records through the same rule, so the two cannot disagree.
+
+**Why the return page polls rather than asserting.** `DESIGN.md` section 14
+specified this and it had not been built: the page reported the redirect status
+and stopped. The redirect says the browser came back. The webhook says money
+moved, and the gap between them was fifteen seconds on the first real payment
+through production.
+
+The bound matters as much as the polling. After roughly thirty seconds the page
+says the payment is still confirming, that this is normal, that it is safe to
+close the page, and that they should not pay again. It does not claim success
+and it does not claim failure, because at that moment it knows neither.
+
+**What the receipt deliberately does not do.** It is not emailed, because there
+is no mail infrastructure here and pretending otherwise would be a screenshot of
+a feature. It says the descriptor that will appear on the card statement, which
+is the cheapest way to prevent the chargeback described in `SCOPE.md` item 6:
+the patient who does not recognise a line on their statement.

@@ -80,6 +80,14 @@ function DueHeader({
         <p className="muted" style={{ marginTop: "1rem" }}>
           Nothing further is owed on this statement.
         </p>
+        <div style={{ maxWidth: "20rem", marginTop: "2rem" }}>
+          <Link
+            href={`/statement/${encodeURIComponent(statementRef)}/receipt`}
+            className="btn btn-quiet"
+          >
+            View receipt
+          </Link>
+        </div>
       </>
     );
   }
@@ -98,10 +106,18 @@ function DueHeader({
         </p>
       )}
 
-      <div style={{ maxWidth: "20rem", marginTop: "2rem" }}>
+      <div style={{ maxWidth: "20rem", marginTop: "2rem", display: "grid", gap: "0.7rem" }}>
         <Link href={`/statement/${encodeURIComponent(statementRef)}/pay`} className="btn">
           Pay this balance
         </Link>
+        {balance.amountPaid > 0 && (
+          <Link
+            href={`/statement/${encodeURIComponent(statementRef)}/receipt`}
+            className="btn btn-quiet"
+          >
+            Receipt for what you paid
+          </Link>
+        )}
       </div>
     </>
   );

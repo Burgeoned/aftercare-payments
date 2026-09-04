@@ -3,6 +3,8 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+import { DateOfBirthField, EMPTY_DATE, toIsoDate, type DateParts } from "./date-of-birth";
+
 /**
  * Guest lookup form.
  *
@@ -10,19 +12,24 @@ import { useState } from "react";
  * in a request body instead of a query string. See docs/DECISIONS.md D-012.
  */
 
-interface FieldState {
-  readonly ref: string;
-  readonly dateOfBirth: string;
-}
-
 export function LookupForm() {
   const router = useRouter();
-  const [fields, setFields] = useState<FieldState>({ ref: "", dateOfBirth: "" });
+  const [ref, setRef] = useState("");
+  const [dob, setDob] = useState<DateParts>(EMPTY_DATE);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
+  const anyDobEntered = dob.month !== "" || dob.day !== "" || dob.year !== "";
+  const isoDate = toIsoDate(dob);
+
   async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+
+    if (isoDate === null) {
+      setError("Enter your date of birth as month, day and year.");
+      return;
+    }
+
     setSubmitting(true);
     setError(null);
 
@@ -31,7 +38,7 @@ export function LookupForm() {
       response = await fetch("/api/statements/lookup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(fields),
+        body: JSON.stringify({ ref, dateOfBirth: isoDate }),
       });
     } catch {
       setSubmitting(false);
@@ -48,7 +55,7 @@ export function LookupForm() {
 
     // The access cookie is set by the response. The statement page reads it, so
     // nothing identifying travels in this navigation.
-    router.push(`/statement/${encodeURIComponent(fields.ref.trim().toUpperCase())}`);
+    router.push(`/statement/${encodeURIComponent(ref.trim().toUpperCase())}`);
   }
 
   return (
@@ -58,32 +65,25 @@ export function LookupForm() {
         <input
           id="ref"
           name="ref"
-          className="input"
+          className="input num"
           required
           autoComplete="off"
           autoCapitalize="characters"
           spellCheck={false}
           placeholder="AFT-0000-0000"
-          value={fields.ref}
-          onChange={(e) => setFields({ ...fields, ref: e.target.value })}
+          value={ref}
+          onChange={(e) => setRef(e.target.value)}
         />
         <p className="hint" style={{ marginTop: "var(--gap-label)" }}>
           Printed at the top of your statement.
         </p>
       </div>
 
-      <div className="field">
-        <label htmlFor="dateOfBirth">Date of birth</label>
-        <input
-          id="dateOfBirth"
-          name="dateOfBirth"
-          className="input"
-          type="date"
-          required
-          value={fields.dateOfBirth}
-          onChange={(e) => setFields({ ...fields, dateOfBirth: e.target.value })}
-        />
-      </div>
+      <DateOfBirthField
+        value={dob}
+        onChange={setDob}
+        invalid={anyDobEntered && isoDate === null}
+      />
 
       {error !== null && (
         <p role="alert" className="note note-warn" style={{ marginBottom: "var(--gap-field)" }}>

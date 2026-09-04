@@ -102,7 +102,7 @@ function deriveStatus(
  * out-of-order deliveries, applied at read time so a late arrival cannot walk
  * the balance backwards either. See docs/DESIGN.md section 6.
  */
-function latestPerProcessorId<T extends { readonly updatedAt: Timestamp }>(
+export function latestPerProcessorId<T extends { readonly updatedAt: Timestamp }>(
   rows: readonly T[],
   identity: (row: T) => string,
 ): readonly T[] {
@@ -160,5 +160,36 @@ export function deriveBalance(
       amountRefunded,
       mine.some((p) => IN_FLIGHT.has(p.status)),
     ),
+  };
+}
+
+/**
+ * The settled activity on a statement, oldest first.
+ *
+ * The same fold the balance uses, exposed because a receipt has to show the
+ * same set of payments the balance counted. A receipt derived from a different
+ * view of the log than the balance is how a patient ends up with a receipt that
+ * does not add up to what they were charged.
+ */
+export function settledActivity(
+  statement: Statement,
+  payments: readonly Payment[],
+  refunds: readonly Refund[],
+): { readonly payments: readonly Payment[]; readonly refunds: readonly Refund[] } {
+  const mine = latestPerProcessorId(
+    payments.filter((p) => p.statementId === statement.id),
+    (p) => p.hyperswitchPaymentId,
+  ).filter((p) => p.status === "succeeded");
+
+  const myIds = new Set(mine.map((p) => p.id));
+
+  return {
+    payments: [...mine].sort((a, b) => a.updatedAt.localeCompare(b.updatedAt)),
+    refunds: latestPerProcessorId(
+      refunds.filter((r) => myIds.has(r.paymentId)),
+      (r) => r.hyperswitchRefundId,
+    )
+      .filter((r) => r.status === "succeeded")
+      .sort((a, b) => a.updatedAt.localeCompare(b.updatedAt)),
   };
 }

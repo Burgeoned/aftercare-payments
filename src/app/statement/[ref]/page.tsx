@@ -3,7 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { ACCESS_COOKIE, resolveAccess } from "@/lib/access";
-import { healthAccountEligibleAmount } from "@/lib/domain/balance";
+import { healthAccountEligibleAmount, isCollectible } from "@/lib/domain/balance";
 import { PROVIDER_NAME } from "@/lib/domain/fixtures";
 import { viewStatement } from "@/lib/domain/lookup";
 import { formatUsd } from "@/lib/domain/money";
@@ -77,6 +77,17 @@ function DueHeader({
   balance: StatementBalance;
   statementRef: string;
 }) {
+  const receipt = (
+    <div style={{ maxWidth: "20rem", marginTop: "2rem" }}>
+      <Link
+        href={`/statement/${encodeURIComponent(statementRef)}/receipt`}
+        className="btn btn-quiet"
+      >
+        View receipt
+      </Link>
+    </div>
+  );
+
   if (balance.status === "settling") {
     return (
       <>
@@ -89,36 +100,46 @@ function DueHeader({
           still be returned in that time, so nothing is final yet. There is nothing for
           you to do.
         </p>
-        <div style={{ maxWidth: "20rem", marginTop: "2rem" }}>
-          <Link
-            href={`/statement/${encodeURIComponent(statementRef)}/receipt`}
-            className="btn btn-quiet"
-          >
-            View receipt
-          </Link>
-        </div>
+        {receipt}
       </>
     );
   }
 
-  if (balance.status === "paid") {
+  /**
+   * Branch on the balance, not on the status name.
+   *
+   * This used to test `status === "paid"`, so a statement that had been paid and
+   * then partially refunded fell through to the default branch and offered
+   * "Pay this balance" against $0.00. The button went nowhere, because the pay
+   * page refuses a zero balance, which is the correct behaviour arrived at by
+   * the wrong route: the offer should never have been made.
+   *
+   * There is one question here and it is how much is owed. `isCollectible` is
+   * the only thing that answers it, and the pay route asks the same function,
+   * so the offer and the route can no longer disagree. The status is left to
+   * decide the wording, which is all it was ever good for.
+   */
+  if (!isCollectible(balance)) {
+    const refunded = balance.amountRefunded > 0;
+
     return (
       <>
         <p className="eyebrow" style={{ marginBottom: "0.9rem" }}>
-          Paid in full
+          {refunded ? "Settled, after a correction" : "Paid in full"}
         </p>
-        <p className="answer paid-mark">{formatUsd(balance.patientResponsibility)}</p>
-        <p className="muted" style={{ marginTop: "1rem" }}>
-          Nothing further is owed on this statement.
+        <p className="answer paid-mark">{formatUsd(balance.amountPaid)}</p>
+        <p className="muted" style={{ marginTop: "1rem", maxWidth: "34rem" }}>
+          {refunded ? (
+            <>
+              You paid {formatUsd(balance.amountPaid)} and{" "}
+              <span className="refund-mark num">{formatUsd(balance.amountRefunded)}</span> was
+              returned after your insurer reprocessed the claim. Nothing further is owed.
+            </>
+          ) : (
+            "Nothing further is owed on this statement."
+          )}
         </p>
-        <div style={{ maxWidth: "20rem", marginTop: "2rem" }}>
-          <Link
-            href={`/statement/${encodeURIComponent(statementRef)}/receipt`}
-            className="btn btn-quiet"
-          >
-            View receipt
-          </Link>
-        </div>
+        {receipt}
       </>
     );
   }

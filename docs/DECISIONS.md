@@ -1351,3 +1351,53 @@ deferring the whole thing.
 says paid. The receipt for a bank debit says it is clearing, that it can still
 be returned, that nothing more is owed unless it is, and that they will be told
 if it is. Two rails that settle differently should not produce one sentence.
+
+## D-035: two readers asked the same question and got different answers
+
+Found by a patient looking at a settled statement, which is the right way to find
+it and the expensive way.
+
+`AFT-4021-8837` had been paid in full and then partially refunded after the payer
+reprocessed the claim. Nothing was owed. The statement page offered
+**Pay this balance** against $0.00, and clicking it went nowhere.
+
+**The two answers.** The pay route refused a zero balance:
+
+```ts
+if (balance.remaining === 0) redirect(...)
+```
+
+The statement header decided from the status name instead, branching on
+`settling` and `paid` and treating everything else as collectible. A statement
+that is paid and then refunded has status `partially_refunded`, which is not the
+string `paid`, so it fell through to the offer. Both readers were individually
+defensible. They were asking the same question and only one of them was asking
+it about money.
+
+**Why the status was the wrong input.** The status is a label describing how a
+balance arrived where it is. It is not the balance. `partially_refunded` and
+`refunded` both describe statements that can be settled or still owing, and
+which one they are is a fact about `remaining`, not about the label. Testing the
+label meant enumerating the states that happen to be settled, and the defect was
+one missing case in that enumeration. There will always be one missing case in
+an enumeration that is maintained by hand.
+
+**The fix is one function, not one more branch.** `isCollectible(balance)` lives
+in `balance.ts` next to the fold, and both the header and the pay route call it.
+Amount owed is the only input, with `settling` the single exception, because a
+bank debit covering that figure has already been taken and asking again collects
+it twice. The offer and the route now cannot disagree, because there is no
+longer a second place to disagree from.
+
+**The pattern, which has now appeared five times.** D-017, D-026, D-029 and D-032
+were all one reader of shared state reasoning differently from another. This is
+the same shape at the presentation layer rather than the ledger. The lesson each
+time has been the same: when two call sites need the same answer, the answer
+belongs in a function, and the fold or the guard is the function. A comment
+saying "keep these in sync" would not have caught this, and neither did four
+subagent reviews. A patient clicking a button did.
+
+**Cost of the miss.** None, and that is luck rather than design. The pay route's
+guard was correct, so no payment could be taken against a settled statement. Had
+the header been right and the route lax, the same divergence collects money the
+provider would have to refund.

@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { deriveBalance, healthAccountEligibleAmount, settledActivity } from "./balance";
+import {
+  deriveBalance,
+  healthAccountEligibleAmount,
+  isCollectible,
+  settledActivity,
+} from "./balance";
 import { STATEMENTS } from "./fixtures";
 import { cents } from "./types";
 import type { Payment, PaymentStatus, Refund, RefundStatus, Statement } from "./types";
@@ -372,5 +377,62 @@ describe("bank debit is provisional", () => {
 
     expect(balance.remaining).toBe(1270);
     expect(balance.status).toBe("open");
+  });
+});
+
+describe("isCollectible", () => {
+  /**
+   * Regression for a live defect on AFT-4021-8837. The statement was paid in
+   * full, the payer reprocessed the claim, and a partial refund went back. That
+   * leaves nothing owed and a status of "partially_refunded", which is not the
+   * string "paid", so the statement header offered "Pay this balance" against
+   * $0.00 while the pay route redirected straight back. Two readers, two
+   * answers, one dead button.
+   */
+  it("refuses a statement that was paid and then partially refunded", () => {
+    const balance = deriveBalance(
+      statement,
+      [payment("a", OWED, "succeeded")],
+      [refund("r1", "a", 1270, "succeeded")],
+      {
+        statementId: statement.id,
+        revisedPatientResponsibility: cents(2000),
+        reason: "payer correction",
+        at: "2026-08-20T10:00:00.000Z",
+      },
+    );
+
+    expect(balance.status).toBe("partially_refunded");
+    expect(balance.remaining).toBe(0);
+    expect(isCollectible(balance)).toBe(false);
+  });
+
+  it("refuses a fully paid statement", () => {
+    const balance = deriveBalance(statement, [payment("a", OWED, "succeeded")], []);
+
+    expect(balance.remaining).toBe(0);
+    expect(isCollectible(balance)).toBe(false);
+  });
+
+  // A bank debit has been taken and has not cleared. The figure is nonzero and
+  // asking for it again would collect it twice.
+  it("refuses a balance that is still clearing", () => {
+    const balance = deriveBalance(
+      statement,
+      [payment("a", OWED, "succeeded", { tender: { class: "bank_debit", last4: "6789", brand: null } })],
+      [],
+      null,
+      "2026-08-06T10:00:00.000Z",
+    );
+
+    expect(balance.status).toBe("settling");
+    expect(isCollectible(balance)).toBe(false);
+  });
+
+  it("allows an unpaid balance and a genuine partial payment", () => {
+    expect(isCollectible(deriveBalance(statement, [], []))).toBe(true);
+    expect(
+      isCollectible(deriveBalance(statement, [payment("a", 1000, "succeeded")], [])),
+    ).toBe(true);
   });
 });

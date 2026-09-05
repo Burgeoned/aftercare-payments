@@ -270,3 +270,23 @@ export function latestAttempt(
     null,
   );
 }
+
+/**
+ * Whether there is money left to collect on this statement.
+ *
+ * This exists because the question was being asked in two places and answered
+ * two different ways. The pay route refused a zero balance, while the statement
+ * header offered a pay button on any status that was not literally "paid". A
+ * statement that was paid and then partially refunded satisfied both: the header
+ * offered collection and the route declined it, so the button led nowhere.
+ *
+ * The status is a label for how the balance got where it is. It is not the
+ * balance, and it should not be the thing anybody tests to decide whether to
+ * ask a patient for money. Amount owed is the only input here, and "settling"
+ * is the one case where a nonzero figure is still not collectible, because the
+ * bank debit covering it has been taken and simply has not cleared.
+ */
+export function isCollectible(balance: StatementBalance): boolean {
+  if (balance.status === "settling") return false;
+  return balance.remaining > 0;
+}

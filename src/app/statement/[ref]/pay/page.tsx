@@ -3,7 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { ACCESS_COOKIE, resolveAccess } from "@/lib/access";
-import { healthAccountEligibleAmount, latestAttempt } from "@/lib/domain/balance";
+import { healthAccountEligibleAmount, isCollectible, latestAttempt } from "@/lib/domain/balance";
 import { PROVIDER_NAME } from "@/lib/domain/fixtures";
 import { viewStatement } from "@/lib/domain/lookup";
 import { isDeclineCategory } from "@/lib/domain/decline";
@@ -46,7 +46,9 @@ export default async function PayStatementPage({
 
   // Nothing to collect. Sending the patient to a checkout that will be refused
   // by the intent route is worse than not offering it.
-  if (balance.remaining === 0) redirect(`/statement/${encodeURIComponent(statement.ref)}`);
+  // Same question the statement header asks, same function, so a balance that
+  // is not collectible is never offered and never reached.
+  if (!isCollectible(balance)) redirect(`/statement/${encodeURIComponent(statement.ref)}`);
 
   const eligible = healthAccountEligibleAmount(statement);
 

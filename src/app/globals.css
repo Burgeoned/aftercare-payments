@@ -147,6 +147,20 @@ body {
   gap: var(--gap-section);
 }
 
+/**
+ * Grid and flex children default to `min-width: auto`, which means they refuse
+ * to shrink below their content. The statement table carries a 34rem min-width
+ * so its columns stay readable, and without this that width propagates all the
+ * way up and scrolls the whole page sideways on a phone: 375px of viewport
+ * against 570px of document. The table is supposed to scroll inside its own
+ * box, and this is what lets it.
+ */
+.stack > *,
+.card,
+.table-wrap {
+  min-width: 0;
+}
+
 /* --------------------------------------------------------------------- */
 /* Type                                                                   */
 /* --------------------------------------------------------------------- */

@@ -21,6 +21,7 @@
  *   node scripts/export-session.mjs --out ai-sessions
  *   node scripts/export-session.mjs --project <slug|path>  # another project's dir
  *   node scripts/export-session.mjs --session <id-prefix>  # one session only
+ *   node scripts/export-session.mjs --redact <file>        # extra strings to remove
  *
  * `--project` exists because a transcript is filed under the working directory
  * the session ran in, not the repo it produced. Work done on this repo from a
@@ -45,9 +46,40 @@ const REDACTIONS = [
   [/\bBearer\s+[A-Za-z0-9._-]{20,}/g, "Bearer [REDACTED]"],
 ];
 
+/**
+ * Extra literal strings to remove, loaded from a file that is not committed.
+ *
+ * A session can pick up something personal that no pattern would catch: a
+ * former employer, a salary figure, the name of an unrelated project. Those
+ * came from the operator's own screen rather than from anything this repo
+ * produced, and no regular expression is going to recognise them.
+ *
+ * The list lives outside the repository on purpose. Committing "redact this
+ * employer's name" into a public repository publishes the employer's name,
+ * which is the thing the redaction was for.
+ */
+let extraRedactions = [];
+
+function loadExtraRedactions(path) {
+  if (path === undefined) return;
+
+  const lines = readFileSync(path, "utf8")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line !== "" && !line.startsWith("#"));
+
+  extraRedactions = lines.map((literal) => new RegExp(escapeRegExp(literal), "gi"));
+  console.log(`  redacting ${lines.length} additional string(s) from ${path}`);
+}
+
+function escapeRegExp(literal) {
+  return literal.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 function redact(text) {
   let out = String(text ?? "");
   for (const [pattern, replacement] of REDACTIONS) out = out.replace(pattern, replacement);
+  for (const pattern of extraRedactions) out = out.replace(pattern, "[REDACTED]");
   return out;
 }
 
@@ -220,6 +252,7 @@ function flag(name) {
 const outDir = flag("--out") ?? "ai-sessions";
 const projectArg = flag("--project");
 const sessionArg = flag("--session");
+loadExtraRedactions(flag("--redact"));
 // Cuts the export at an operator prompt boundary. Used when a session's
 // opening prompts carry context that does not belong in a shared repo.
 const fromPrompt = Number(flag("--from") ?? 1);

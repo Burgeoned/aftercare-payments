@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 
+import { guidanceFor, type DeclineCategory } from "@/lib/domain/decline";
 import { formatUsd } from "@/lib/domain/money";
 import type { Cents } from "@/lib/domain/types";
 import { Checkout } from "./checkout";
@@ -30,10 +31,12 @@ type Portion = "full" | "health_account";
 export function PayPanel({
   remaining,
   eligible,
+  declined,
   returnUrl,
 }: {
   remaining: Cents;
   eligible: Cents;
+  declined: DeclineCategory | null;
   returnUrl: string;
 }) {
   // Only a mix is a decision. If every line is eligible, or none is, there is
@@ -42,12 +45,31 @@ export function PayPanel({
 
   const [portion, setPortion] = useState<Portion | null>(mixed ? null : "full");
 
+  /**
+   * The decline is stated once, at the top, before anything else on the page.
+   * A patient who has just been declined is not reading the rest until they
+   * know what happened and what to do about it.
+   */
+  const notice =
+    declined === null ? null : (
+      <div className="note note-warn" style={{ marginTop: "2rem" }}>
+        <p style={{ margin: 0, fontWeight: 600 }}>{guidanceFor(declined).headline}</p>
+        <p style={{ margin: "0.4rem 0 0" }}>{guidanceFor(declined).guidance}</p>
+        {!guidanceFor(declined).retrySameMethod && (
+          <p style={{ margin: "0.4rem 0 0" }}>
+            Nothing was charged, and the balance below is unchanged.
+          </p>
+        )}
+      </div>
+    );
+
   const amount = portion === "health_account" ? eligible : remaining;
   const leftOver = (remaining - eligible) as Cents;
 
   if (portion === null) {
     return (
       <>
+        {notice}
         <p className="eyebrow" style={{ margin: "2.25rem 0 0.9rem" }}>
           Amount due
         </p>
@@ -77,6 +99,7 @@ export function PayPanel({
 
   return (
     <>
+      {notice}
       <p className="eyebrow" style={{ margin: "2.25rem 0 0.9rem" }}>
         Paying now
       </p>

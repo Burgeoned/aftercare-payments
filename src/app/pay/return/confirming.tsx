@@ -1,7 +1,10 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+
+import { guidanceFor, isDeclineCategory, type DeclineCategory } from "@/lib/domain/decline";
 
 /**
  * Waits for the ledger to catch up with the redirect.
@@ -18,19 +21,22 @@ import { useEffect, useState } from "react";
 
 const SCHEDULE_MS = [1000, 1500, 2000, 3000, 4000, 5000, 6000, 8000];
 
-type Phase = "waiting" | "settled" | "timed_out" | "no_access";
+type Phase = "waiting" | "settled" | "declined" | "timed_out" | "no_access";
 
 interface StatusResponse {
   readonly ref: string;
   readonly status: string;
   readonly remaining: number;
   readonly amountPaid: number;
+  readonly lastAttemptStatus: string | null;
+  readonly declineCategory: string | null;
 }
 
 export function Confirming({ redirectStatus }: { redirectStatus: string }) {
   const router = useRouter();
   const [phase, setPhase] = useState<Phase>("waiting");
   const [elapsed, setElapsed] = useState(0);
+  const [decline, setDecline] = useState<{ category: DeclineCategory; ref: string } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -49,6 +55,25 @@ export function Confirming({ redirectStatus }: { redirectStatus: string }) {
 
         if (res.ok) {
           const body = (await res.json()) as StatusResponse;
+
+          /**
+           * A decline is as final as a success for this page's purpose: the
+           * ledger has spoken, so there is nothing left to wait for. Waiting
+           * out the full schedule before saying so would leave a patient
+           * watching a spinner after their card had already been refused.
+           */
+          if (body.lastAttemptStatus === "failed") {
+            if (!cancelled) {
+              setDecline({
+                category: isDeclineCategory(body.declineCategory)
+                  ? body.declineCategory
+                  : "unknown",
+                ref: body.ref,
+              });
+              setPhase("declined");
+            }
+            return;
+          }
 
           // Any collected money means a webhook landed and the ledger moved.
           if (body.amountPaid > 0) {
@@ -82,6 +107,25 @@ export function Confirming({ redirectStatus }: { redirectStatus: string }) {
 
   if (phase === "settled") {
     return <p className="muted">Confirmed. Taking you to your receipt.</p>;
+  }
+
+  if (phase === "declined" && decline !== null) {
+    const { headline, guidance } = guidanceFor(decline.category);
+
+    return (
+      <>
+        <p className="note note-warn" style={{ margin: 0 }}>
+          <span style={{ fontWeight: 600 }}>{headline}</span>
+          <br />
+          {guidance}
+        </p>
+        <div style={{ maxWidth: "20rem", marginTop: "1.75rem" }}>
+          <Link href={`/statement/${encodeURIComponent(decline.ref)}/pay`} className="btn">
+            Try another method
+          </Link>
+        </div>
+      </>
+    );
   }
 
   if (phase === "no_access") {

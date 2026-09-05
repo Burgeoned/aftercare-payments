@@ -744,3 +744,62 @@ creates a second intent and abandons the first. That is the idempotency gap
 already recorded in the architecture review: an abandoned intent sits in the log
 as `requires_payment_method` until a webhook resolves it, and nothing resolves
 one the patient never confirmed.
+
+---
+
+## D-024: a decline is classified once, stored as a category, and worded at render
+
+Date: 2026-09-04
+
+**Decision.** `src/lib/domain/decline.ts` maps a processor decline to a category
+and a piece of patient-facing guidance. The webhook classifies on arrival and
+stores only the category in `Payment.failureReason`. The wording is derived
+wherever it is shown.
+
+**Why this is the error path that matters here.** A retail customer who is
+declined abandons a basket. A patient who is declined still owes the money, and
+what happens in the next thirty seconds decides whether the provider collects it
+or writes it off. `DOMAIN.md` section 6 calls this the highest-value error path
+in the vertical and it was the last core flow with no implementation.
+
+**The domain-specific part.** The same decline code means different things on
+different tenders, and demands different advice:
+
+```
+insufficient_funds on a personal card    -> insufficient_funds
+insufficient_funds on a health account   -> health_account_limit
+```
+
+A personal card declining for funds might work tomorrow. A health account
+declining for funds means the account balance is smaller than the bill, which is
+the normal case rather than an error, and the answer is to pay the eligible
+portion and settle the rest another way. Telling that patient to "try again
+later" is advice that cannot work. Verified against the running application:
+identical `error_code`, two categories.
+
+**Two rules on the wording, and both are tested.** It never implies the patient
+did something wrong, because a bill arriving weeks after the care is already an
+unpleasant surprise and a decline reads as an accusation if you let it. And it
+always says what to do next, including in the `unknown` case, because "your card
+was declined" with no suggestion is exactly where collection stops.
+
+**Why the category is stored and not the sentence.** The connector's own code
+and message are connector-specific, they change, and showing one to a patient is
+what this normalization exists to prevent. Storing the category means the wording
+can be improved without rewriting the log, and a record written months ago
+renders in today's language.
+
+**On Hyperswitch's unified codes.** The API carries `unified_code` and
+`unified_message`, normalized across connectors, which is exactly what this
+module would rather consume and is a real argument for the orchestration layer.
+The source marks both "not live yet". They are read when present and are
+expected to be null, and the local mapping does the work until they ship. Most
+of this module is deletable when they do, which is the intended direction rather
+than a regret.
+
+**Where it surfaces.** The pay page states the decline above everything else,
+read from the ledger rather than from a query parameter, because a redirect can
+be lost and the ledger cannot. The return page stops polling the moment the
+ledger records a failure, rather than making a patient watch a spinner for
+thirty seconds after their card was already refused, and offers another method
+immediately.

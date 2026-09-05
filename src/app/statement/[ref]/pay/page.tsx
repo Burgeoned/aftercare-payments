@@ -3,10 +3,11 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { ACCESS_COOKIE, resolveAccess } from "@/lib/access";
-import { healthAccountEligibleAmount } from "@/lib/domain/balance";
+import { healthAccountEligibleAmount, latestAttempt } from "@/lib/domain/balance";
 import { PROVIDER_NAME } from "@/lib/domain/fixtures";
 import { viewStatement } from "@/lib/domain/lookup";
-import { findStatementByRef } from "@/lib/domain/store";
+import { isDeclineCategory } from "@/lib/domain/decline";
+import { findStatementByRef, paymentsForStatement } from "@/lib/domain/store";
 import { serverEnv } from "@/lib/env";
 import type { Cents } from "@/lib/domain/types";
 import { PayPanel } from "./pay-panel";
@@ -53,6 +54,18 @@ export default async function PayStatementPage({
   // balance with another method must not be shown the full eligible figure.
   const eligibleNow = (eligible < balance.remaining ? eligible : balance.remaining) as Cents;
 
+  /**
+   * A decline is the reason the patient is back on this page, so it is the
+   * first thing the page should talk about. Read from the ledger rather than
+   * from a query parameter, because the redirect can be lost and the ledger
+   * cannot.
+   */
+  const attempt = latestAttempt(statement, await paymentsForStatement(statement.id));
+  const declined =
+    attempt?.status === "failed" && isDeclineCategory(attempt.failureReason)
+      ? attempt.failureReason
+      : null;
+
   return (
     <main className="instrument" style={{ minHeight: "100vh" }}>
       <div className="wrap wrap-narrow" style={{ paddingTop: "3rem", paddingBottom: "4rem" }}>
@@ -63,6 +76,7 @@ export default async function PayStatementPage({
         <PayPanel
           remaining={balance.remaining}
           eligible={eligibleNow}
+          declined={declined}
           returnUrl={`${serverEnv().appUrl}/pay/return`}
         />
 

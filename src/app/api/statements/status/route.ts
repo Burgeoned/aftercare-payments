@@ -2,7 +2,7 @@ import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 
 import { ACCESS_COOKIE, resolveAccess } from "@/lib/access";
-import { deriveBalance } from "@/lib/domain/balance";
+import { deriveBalance, latestAttempt } from "@/lib/domain/balance";
 import {
   findStatementById,
   paymentsForStatement,
@@ -41,10 +41,16 @@ export async function GET(): Promise<NextResponse> {
     await refundsForPayments(payments.map((p) => p.id)),
   );
 
+  const attempt = latestAttempt(statement, payments);
+
   return NextResponse.json({
     ref: statement.ref,
     status: balance.status,
     remaining: balance.remaining,
     amountPaid: balance.amountPaid,
+    // The category, not a sentence. The client renders the wording, so the two
+    // cannot drift apart into two different explanations of one decline.
+    lastAttemptStatus: attempt?.status ?? null,
+    declineCategory: attempt?.status === "failed" ? attempt.failureReason : null,
   });
 }

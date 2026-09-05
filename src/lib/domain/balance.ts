@@ -193,3 +193,23 @@ export function settledActivity(
       .sort((a, b) => a.updatedAt.localeCompare(b.updatedAt)),
   };
 }
+
+/**
+ * The most recent attempt on a statement, succeeded or not.
+ *
+ * `settledActivity` deliberately drops failures because a receipt is a record
+ * of money that moved. A decline is not that, and it is exactly what the next
+ * screen has to talk about, so it is read separately.
+ */
+export function latestAttempt(
+  statement: Statement,
+  payments: readonly Payment[],
+): Payment | null {
+  return latestPerProcessorId(
+    payments.filter((p) => p.statementId === statement.id),
+    (p) => p.hyperswitchPaymentId,
+  ).reduce<Payment | null>(
+    (newest, row) => (newest === null || row.updatedAt > newest.updatedAt ? row : newest),
+    null,
+  );
+}

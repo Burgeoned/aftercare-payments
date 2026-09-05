@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 
+import { classifyDecline } from "@/lib/domain/decline";
 import { classifyTender } from "@/lib/domain/tender";
 import { cents } from "@/lib/domain/types";
 import {
@@ -83,6 +84,27 @@ async function applyPayment(event: PaymentEvent): Promise<NextResponse> {
     return ack("stale", { recorded: latest.updatedAt, received: event.updatedAt });
   }
 
+  const tender = tenderFrom(event);
+
+  /**
+   * Classified here rather than at read time, because the connector's own code
+   * and message are the only inputs and they are not worth keeping: they are
+   * connector-specific, they change, and showing one to a patient is exactly
+   * what this normalization exists to prevent. The category is stored; the
+   * wording is derived when it is rendered, so improving the wording does not
+   * require rewriting the log.
+   */
+  const failureReason =
+    event.status === "failed"
+      ? classifyDecline({
+          unifiedCode: event.unifiedCode,
+          unifiedMessage: event.unifiedMessage,
+          errorCode: event.errorCode,
+          errorMessage: event.errorMessage,
+          tenderClass: tender?.class ?? null,
+        }).category
+      : null;
+
   const payment: Payment = {
     id: randomUUID(),
     statementId,
@@ -90,8 +112,8 @@ async function applyPayment(event: PaymentEvent): Promise<NextResponse> {
     amount: cents(event.amount),
     currency: "USD",
     status: event.status,
-    tender: tenderFrom(event),
-    failureReason: event.status === "failed" ? event.failureReason : null,
+    tender,
+    failureReason,
     createdAt: new Date().toISOString(),
     // The processor's clock, not ours. Ordering compares these across
     // deliveries and our clock has nothing to do with when the resource moved.

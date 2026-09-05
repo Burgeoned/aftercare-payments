@@ -50,7 +50,14 @@ export interface PaymentEvent {
   readonly cardIsin: string | null;
   /** `card`, `bank_debit`, and so on. Settles the tender class before the BIN. */
   readonly paymentMethod: string | null;
-  readonly failureReason: string | null;
+  readonly errorCode: string | null;
+  readonly errorMessage: string | null;
+  /**
+   * Normalized across connectors by Hyperswitch. Documented in the source as
+   * not live yet, so it is read and expected to be null. See decline.ts.
+   */
+  readonly unifiedCode: string | null;
+  readonly unifiedMessage: string | null;
 }
 
 export interface RefundEvent {
@@ -173,7 +180,10 @@ export function parseWebhook(body: unknown): WebhookEvent | ParseFailure {
       cardNetwork: card.network,
       cardIsin: card.isin,
       paymentMethod: str(resource, "payment_method"),
-      failureReason: str(resource, "error_message"),
+      errorCode: str(resource, "error_code"),
+      errorMessage: str(resource, "error_message"),
+      unifiedCode: str(resource, "unified_code"),
+      unifiedMessage: str(resource, "unified_message"),
     };
   }
 

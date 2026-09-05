@@ -5,6 +5,7 @@ import {
   findPatientById,
   findStatementByRef,
   paymentsForStatement,
+  readjudicationFor,
   refundsForPayments,
 } from "./store";
 import type { Result, Statement, StatementBalance } from "./types";
@@ -112,6 +113,6 @@ async function buildView(
   return {
     statement,
     patientDisplayName,
-    balance: deriveBalance(statement, payments, refunds),
+    balance: deriveBalance(statement, payments, refunds, await readjudicationFor(statement.id)),
   };
 }

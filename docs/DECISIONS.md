@@ -803,3 +803,53 @@ be lost and the ledger cannot. The return page stops polling the moment the
 ledger records a failure, rather than making a patient watch a spinner for
 thirty seconds after their card was already refused, and offers another method
 immediately.
+
+---
+
+## D-025: a payer correction is recorded beside the statement, not into it
+
+Date: 2026-09-04
+
+**Decision.** A re-adjudication is stored as its own record carrying a revised
+patient responsibility. `deriveBalance` applies it. The statement's line items
+are never edited.
+
+**Why not correct the statement.** The patient received a document saying they
+owed a particular amount. A record that quietly becomes the new number cannot
+explain why they were charged the old one, and the question a patient asks after
+a correction is exactly "then why did I pay $927?". Keeping both facts means the
+answer exists. It is also what an 835 remittance actually does: it does not
+amend the earlier claim, it adds a later adjudication of it.
+
+**Where the refund goes, and why that is not arbitrary.** A Hyperswitch refund
+references a `payment_id`, so money physically cannot land anywhere except the
+instrument it came from. The IRS constraint on health account funds is satisfied
+by construction rather than by a rule someone has to remember.
+
+On a split tender balance that still leaves a choice, and the choice is made
+explicitly: **health account payments are drawn from last.** Returning money to
+a personal card is unambiguously fine. Returning it to a health account is a
+reversal against a tax-advantaged account: it can interact with the year's
+contribution limit and it reopens a substantiation the patient may already have
+settled with their plan administrator. Given a choice of where to send the same
+dollar, the one with no tax consequence wins. Tested: a $225.00 correction on a
+$702.00 health account plus $225.00 card statement comes entirely off the card.
+
+**Pending refunds count against capacity.** Two corrections in quick succession
+must not both allocate against the same dollars because the first has not
+settled. A failed refund does not, because it claimed nothing.
+
+**Ordering inside the endpoint.** The correction is recorded before any money
+moves. If a refund call fails partway, the statement still shows the corrected
+balance, which is the true one. The other ordering leaves a patient owing a
+figure the payer has already withdrawn.
+
+**An upward revision produces no refund.** A payer revising a balance up does
+not create a debt collectible through this path. It produces a new balance the
+patient is billed for, which is the ordinary flow, and conflating the two would
+let a correction silently charge someone.
+
+**Stated boundary.** `/api/provider/readjudicate` is not authenticated. It moves
+money out of the provider, so a real console sits behind staff authentication
+with an audit trail. Left open deliberately and recorded here rather than built
+halfway, because a fake login is not authentication.

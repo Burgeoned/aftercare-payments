@@ -10,6 +10,7 @@ vi.mock("./store", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./store")>()),
   paymentsForStatement: async () => [],
   refundsForPayments: async () => [],
+  readjudicationFor: async () => null,
 }));
 
 const { lookupStatement } = await import("./lookup");

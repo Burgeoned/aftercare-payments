@@ -11,6 +11,7 @@ import {
   findStatementByRef,
   findPatientById,
   paymentsForStatement,
+  readjudicationFor,
   refundsForPayments,
 } from "@/lib/domain/store";
 import type { Payment } from "@/lib/domain/types";
@@ -77,7 +78,12 @@ export default async function ReceiptPage({ params }: { params: Promise<{ ref: s
 
   const allPayments = await paymentsForStatement(statement.id);
   const allRefunds = await refundsForPayments(allPayments.map((p) => p.id));
-  const balance = deriveBalance(statement, allPayments, allRefunds);
+  const balance = deriveBalance(
+    statement,
+    allPayments,
+    allRefunds,
+    await readjudicationFor(statement.id),
+  );
   const activity = settledActivity(statement, allPayments, allRefunds);
 
   // Nothing has settled. Sending the patient to an empty receipt would suggest

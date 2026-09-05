@@ -6,6 +6,7 @@ import { deriveBalance, latestAttempt } from "@/lib/domain/balance";
 import {
   findStatementById,
   paymentsForStatement,
+  readjudicationFor,
   refundsForPayments,
 } from "@/lib/domain/store";
 
@@ -39,6 +40,7 @@ export async function GET(): Promise<NextResponse> {
     statement,
     payments,
     await refundsForPayments(payments.map((p) => p.id)),
+    await readjudicationFor(statement.id),
   );
 
   const attempt = latestAttempt(statement, payments);

@@ -19,12 +19,12 @@ are not coming back.
 | Statement lookup without an account | Built | Patients pay from a paper or emailed statement. Forcing account creation is the single largest source of abandonment in this vertical |
 | Bill presentation with payer adjustment detail | Built | The explanation is the product. A patient who does not understand the residual calls the billing office or disputes the charge |
 | Card payment via Unified Checkout | Built | The default path, and the one that sets PCI scope |
-| Health account card recognition and tender classification | Planned, step 6 | The domain-specific behavior, handled where it actually lives, at the BIN |
+| Health account card recognition and tender classification | Built |  The domain-specific behavior, handled where it actually lives, at the BIN |
 | ACH debit as an alternative method | Connector configured, step 6 | The economics argument from `DOMAIN.md` section 6, made real |
-| Split tender across two payment attempts | Partial, step 6 | Health account balances are finite. Without this, a patient with a partial FSA balance cannot pay at all |
+| Split tender across two payment attempts | Built |  Health account balances are finite. Without this, a patient with a partial FSA balance cannot pay at all |
 | Verified webhook ingestion as source of truth | Planned, step 5 | Money state does not come from a browser redirect |
-| Partial refund after simulated re-adjudication | Planned, step 6 | The flow that separates this vertical from retail |
-| Decline handling with immediate alternative method | Planned, step 6 | Highest-value error path in the vertical |
+| Partial refund after simulated re-adjudication | Built |  The flow that separates this vertical from retail |
+| Decline handling with immediate alternative method | Built |  Highest-value error path in the vertical |
 
 ## Deferred
 
@@ -169,6 +169,23 @@ On Vercel this needs the same shared store that the payment log needs, see
 `DECISIONS.md` D-013, which is a good reason to solve both at once. The
 public payment page is also a card testing target independently of lookup, which
 build step 7 addresses in the Hyperswitch dashboard rather than here.
+
+### 10. Authentication on the provider console
+
+**What it is.** Staff authentication and an audit trail on
+`/api/provider/readjudicate` and the page that drives it.
+
+**Why deferred.** It is standard application security with no payments content,
+and a fake login is not authentication. The endpoint moves money out of the
+provider, so leaving it open and saying so is more honest than a password field
+that proves nothing.
+
+**How it would be built.** Provider staff are employees, so this is SSO against
+the practice's identity provider rather than passwords, with the acting user's
+identity written into the correction record. That record is already stored
+separately from the statement, so attributing it costs one field. The audit
+requirement is the real one: a correction that moves money needs to say who
+applied it and on what remittance.
 
 ## The general principle
 

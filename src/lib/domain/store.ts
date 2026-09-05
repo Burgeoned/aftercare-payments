@@ -4,6 +4,7 @@ import { Redis } from "@upstash/redis";
 
 import { storeEnv } from "@/lib/env";
 import { PATIENTS, STATEMENTS } from "./fixtures";
+import type { Readjudication } from "./refund";
 import type { Patient, Payment, Refund, Statement } from "./types";
 
 /**
@@ -140,4 +141,30 @@ export async function statementForPayment(
 export async function claimEvent(eventId: string): Promise<boolean> {
   const result = await redis().set(eventKey(eventId), Date.now(), { nx: true, ex: 86_400 });
   return result === "OK";
+}
+
+// ---------------------------------------------------------------------------
+// Payer corrections
+// ---------------------------------------------------------------------------
+
+function readjudicationKey(statementId: string): string {
+  return `aftercare:readjudication:${statementId}`;
+}
+
+/**
+ * Held separately from the statement, which stays exactly as it was issued.
+ *
+ * A payer correction does not rewrite history: the patient still received a
+ * statement saying one thing, and a record that quietly becomes the new number
+ * cannot explain why they were charged the old one. The revision is applied
+ * when the balance is derived, so both facts survive.
+ */
+export async function recordReadjudication(revision: Readjudication): Promise<void> {
+  await redis().set(readjudicationKey(revision.statementId), JSON.stringify(revision));
+}
+
+export async function readjudicationFor(statementId: string): Promise<Readjudication | null> {
+  const raw = await redis().get<string | Readjudication>(readjudicationKey(statementId));
+  if (raw === null || raw === undefined) return null;
+  return typeof raw === "string" ? (JSON.parse(raw) as Readjudication) : raw;
 }

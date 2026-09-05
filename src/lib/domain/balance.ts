@@ -13,6 +13,7 @@
  */
 
 import { clampToZero, subtract, sum } from "./money";
+import type { Readjudication } from "./refund";
 import type {
   Cents,
   Payment,
@@ -121,6 +122,7 @@ export function deriveBalance(
   statement: Statement,
   payments: readonly Payment[],
   refunds: readonly Refund[],
+  readjudication: Readjudication | null = null,
 ): StatementBalance {
   const mine = latestPerProcessorId(
     payments.filter((p) => p.statementId === statement.id),
@@ -141,7 +143,13 @@ export function deriveBalance(
       .map((r) => r.amount),
   );
 
-  const patientOwed = patientResponsibility(statement);
+  /**
+   * A payer correction supersedes the residual the statement was issued with.
+   * The line items are left alone: the statement is a record of what the
+   * patient was told, and a correction is a later fact about it rather than a
+   * reason to rewrite it. See docs/DECISIONS.md D-025.
+   */
+  const patientOwed = readjudication?.revisedPatientResponsibility ?? patientResponsibility(statement);
   const collected = subtract(amountPaid, amountRefunded);
   const remaining = clampToZero(subtract(patientOwed, collected));
 

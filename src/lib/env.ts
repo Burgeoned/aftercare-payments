@@ -1,8 +1,8 @@
 /**
  * Environment configuration, validated once at module load.
  *
- * Hand-rolled rather than pulled from a schema library. The surface is six
- * variables and the failure mode we care about is "a required key is missing at
+ * Hand-rolled rather than pulled from a schema library. The surface is small
+ * and the failure mode we care about is "a required key is missing at
  * deploy time", which does not justify a dependency.
  *
  * Server variables are read lazily through `serverEnv()` so that importing this
@@ -48,6 +48,11 @@ export interface ServerEnv {
    * tokens, because compromising either one should not hand over the other.
    */
   readonly sessionSecret: string;
+  /**
+   * Shared secret for the provider console. Not per-user identity, which is
+   * still deferred, but a real secret rather than a decorative login.
+   */
+  readonly staffPassword: string;
   readonly appUrl: string;
 }
 
@@ -67,6 +72,7 @@ export function serverEnv(): ServerEnv {
     "HYPERSWITCH_PROFILE_ID",
     "HYPERSWITCH_WEBHOOK_SECRET",
     "AFTERCARE_SESSION_SECRET",
+    "AFTERCARE_STAFF_PASSWORD",
     "NEXT_PUBLIC_APP_URL",
   ]);
 
@@ -76,6 +82,7 @@ export function serverEnv(): ServerEnv {
     hyperswitchProfileId: v["HYPERSWITCH_PROFILE_ID"]!,
     hyperswitchWebhookSecret: v["HYPERSWITCH_WEBHOOK_SECRET"]!,
     sessionSecret: v["AFTERCARE_SESSION_SECRET"]!,
+    staffPassword: v["AFTERCARE_STAFF_PASSWORD"]!,
     appUrl: v["NEXT_PUBLIC_APP_URL"]!.replace(/\/+$/, ""),
   };
 

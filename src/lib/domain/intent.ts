@@ -17,7 +17,8 @@
  * docs/DECISIONS.md D-015.
  */
 
-import type { Cents, PaymentError, Result, StatementBalance } from "./types";
+import { latestPerProcessorId } from "./balance";
+import type { Cents, Payment, PaymentError, Result, StatementBalance } from "./types";
 
 /**
  * The portions a patient may choose to pay.
@@ -80,4 +81,32 @@ export function resolvePayableAmount(
   }
 
   return { ok: true, value: eligible };
+}
+
+/**
+ * Statuses where the patient is mid-payment and a second one must not start.
+ *
+ * `requires_payment_method` and `requires_confirmation` are absent on purpose:
+ * nobody has touched those, and D-027 reuses them rather than blocking. These
+ * two are different. The patient is at their bank, or the processor is working,
+ * and starting a second payment produces two real charges for one balance.
+ */
+const IN_FLIGHT: ReadonlySet<Payment["status"]> = new Set([
+  "requires_customer_action",
+  "processing",
+]);
+
+/**
+ * The payment currently in flight on a statement, if there is one.
+ *
+ * `balance.ts` has a set by this name used only to derive a status string. The
+ * comment there claims a patient who refreshes during a 3DS challenge cannot
+ * pay twice, and nothing enforced it. This does. See D-029.
+ */
+export function inFlightPayment(payments: readonly Payment[]): Payment | null {
+  return (
+    latestPerProcessorId(payments, (p) => p.hyperswitchPaymentId).find((p) =>
+      IN_FLIGHT.has(p.status),
+    ) ?? null
+  );
 }

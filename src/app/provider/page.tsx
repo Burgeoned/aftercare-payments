@@ -1,3 +1,7 @@
+import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
+
+import { isStaff, STAFF_COOKIE } from "@/lib/staff";
 import Link from "next/link";
 
 import { PROVIDER_NAME, STATEMENTS } from "@/lib/domain/fixtures";
@@ -21,7 +25,10 @@ import { ReadjudicateForm } from "./readjudicate-form";
 
 export const dynamic = "force-dynamic";
 
-export default function ProviderPage() {
+export default async function ProviderPage() {
+  // The console moves money and controls the fraud guard. See D-030.
+  if (!isStaff((await cookies()).get(STAFF_COOKIE)?.value)) redirect("/provider/login");
+
   return (
     <main className="instrument" style={{ minHeight: "100vh" }}>
       <div className="wrap wrap-narrow" style={{ paddingTop: "3.5rem", paddingBottom: "4.5rem" }}>
@@ -38,10 +45,10 @@ export default function ProviderPage() {
           the instrument it came from.
         </p>
 
-        <p className="note note-warn" style={{ marginTop: "1.75rem" }}>
-          This endpoint moves money out of the provider and is not authenticated. A real
-          billing console sits behind staff authentication with an audit trail. It is left
-          open here deliberately, and recorded as a boundary rather than built halfway.
+        <p className="note" style={{ marginTop: "1.75rem" }}>
+          This endpoint moves money out of the provider, so it is behind a staff password.
+          What is still deferred is per-user identity and an audit trail: a real console
+          records who applied a correction and against which remittance. See D-030.
         </p>
 
         <ReadjudicateForm refs={STATEMENTS.map((s) => s.ref)} />

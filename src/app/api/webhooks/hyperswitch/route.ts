@@ -84,6 +84,14 @@ async function applyPayment(event: PaymentEvent): Promise<NextResponse> {
     return ack("stale", { recorded: latest.updatedAt, received: event.updatedAt });
   }
 
+  if (event.currency !== "USD") {
+    console.error(
+      "webhook reported a currency this application does not bill in",
+      event.hyperswitchPaymentId,
+      event.currency,
+    );
+  }
+
   const tender = tenderFrom(event);
 
   /**
@@ -110,6 +118,13 @@ async function applyPayment(event: PaymentEvent): Promise<NextResponse> {
     statementId,
     hyperswitchPaymentId: event.hyperswitchPaymentId,
     amount: cents(event.amount),
+    /**
+     * The contract carries one currency and this application only bills in it.
+     * The processor's value is compared rather than copied, because an amount
+     * recorded under the wrong unit is a number, not money. A mismatch is
+     * logged and the row is still written under USD, which keeps the ledger
+     * readable while making the discrepancy visible.
+     */
     currency: "USD",
     status: event.status,
     tender,

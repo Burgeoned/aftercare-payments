@@ -2,7 +2,7 @@
 
 ## Requirements
 
-Node 24 or later, or Docker. Both paths are supported and produce the same
+Node 20 or later, matching `engines` in `package.json`. CI runs 24, or Docker. Both paths are supported and produce the same
 result.
 
 ## Setup
@@ -22,6 +22,14 @@ Fill `.env.local` with values from the Hyperswitch dashboard:
 | `HYPERSWITCH_WEBHOOK_SECRET` | Developers → Payment Settings. The payment response hash key |
 | `HYPERSWITCH_BASE_URL` | `https://sandbox.hyperswitch.io` |
 | `NEXT_PUBLIC_APP_URL` | `http://localhost:3000` locally, the Vercel URL in production |
+| `AFTERCARE_SESSION_SECRET` | Generate one: `node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"` |
+| `AFTERCARE_STAFF_PASSWORD` | Any shared secret. Gates the provider console at `/provider` |
+| `KV_REST_API_URL` | Set by the Vercel Upstash integration. Copy locally from the Upstash console |
+| `KV_REST_API_TOKEN` | Same. The read-write token, not the read-only one |
+
+The last four are not optional. Without the session secret a statement lookup
+returns a configuration error, and without the Upstash pair the ledger cannot be
+read at all.
 
 `.env.local` is gitignored. Never commit it, never paste a key into a chat
 session, and never put one in a code sample. This repo's AI sessions are shared
@@ -51,9 +59,9 @@ Or in Docker, which is the recommended path on Windows for the reason in
 docker compose up --build
 ```
 
-Both serve on http://localhost:3000. Visit `/pay` for the integration smoke
-test: a real $1.00 sandbox payment through Unified Checkout. Test card
-`4242 4242 4242 4242`, any future expiry, any CVC.
+Both serve on http://localhost:3000. Visit `/` and look up a statement. The old `/pay` smoke test route was
+removed once the intent route became statement-bound, because an
+unauthenticated payment path is a hole rather than a convenience.
 
 ## Checks
 

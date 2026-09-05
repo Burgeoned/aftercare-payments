@@ -12,6 +12,7 @@ beforeAll(() => {
   process.env["HYPERSWITCH_PROFILE_ID"] = "pro_test";
   process.env["HYPERSWITCH_WEBHOOK_SECRET"] = "whsec_test";
   process.env["AFTERCARE_SESSION_SECRET"] = "a".repeat(64);
+  process.env["AFTERCARE_STAFF_PASSWORD"] = "test-console-password";
   process.env["NEXT_PUBLIC_APP_URL"] = "http://localhost:3000";
 });
 

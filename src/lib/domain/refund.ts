@@ -1,3 +1,4 @@
+import { latestPerProcessorId } from "./balance";
 import { cents, type Cents, type Payment, type Refund, type Timestamp } from "./types";
 
 /**
@@ -45,10 +46,49 @@ export type AllocationError =
   | { readonly kind: "nothing_to_refund" }
   | { readonly kind: "exceeds_collected"; readonly requested: Cents; readonly collected: Cents };
 
+/**
+ * What a payment has already had claimed against it.
+ *
+ * Folded by processor refund id first. The log holds a row per observation: the
+ * provider route writes a pending row and the webhook writes a succeeded row
+ * for the same refund, so summing rows counts one refund twice and halves the
+ * capacity of the payment it came from. That is the same defect as D-017 and
+ * D-026, in the one money computation that had not been audited for it.
+ *
+ * Pending counts. A refund in flight has claimed those dollars even though they
+ * have not landed, and two corrections in quick succession must not both
+ * allocate them. Failed does not count, because it claimed nothing.
+ */
 function alreadyRefunded(payment: Payment, refunds: readonly Refund[]): Cents {
+  const mine = refunds.filter((r) => r.paymentId === payment.id);
+
   return cents(
-    refunds
-      .filter((r) => r.paymentId === payment.id && r.status !== "failed")
+    latestPerProcessorId(mine, (r) => r.hyperswitchRefundId)
+      .filter((r) => r.status !== "failed")
+      .reduce((total, r) => total + r.amount, 0),
+  );
+}
+
+/**
+ * Everything claimed across a statement, folded the same way.
+ *
+ * The provider route needs this rather than the balance's `amountRefunded`,
+ * which counts only what has succeeded. Deciding how much more to send back
+ * from a figure that ignores refunds already in flight issues the same money
+ * twice.
+ */
+export function claimedRefundTotal(
+  payments: readonly Payment[],
+  refunds: readonly Refund[],
+): Cents {
+  const settledIds = new Set(payments.map((p) => p.id));
+
+  return cents(
+    latestPerProcessorId(
+      refunds.filter((r) => settledIds.has(r.paymentId)),
+      (r) => r.hyperswitchRefundId,
+    )
+      .filter((r) => r.status !== "failed")
       .reduce((total, r) => total + r.amount, 0),
   );
 }
@@ -78,7 +118,12 @@ export function allocateRefund(
 ): { ok: true; value: readonly RefundAllocation[] } | { ok: false; error: AllocationError } {
   if (amount <= 0) return { ok: false, error: { kind: "nothing_to_refund" } };
 
-  const settled = payments.filter((p) => p.status === "succeeded");
+  // Folded, for the same reason every other reader folds: two succeeded rows for
+  // one processor payment would double the capacity and authorise a refund
+  // larger than what was collected.
+  const settled = latestPerProcessorId(payments, (p) => p.hyperswitchPaymentId).filter(
+    (p) => p.status === "succeeded",
+  );
 
   const capacity = settled.map((payment) => ({
     payment,

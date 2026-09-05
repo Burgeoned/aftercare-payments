@@ -121,7 +121,7 @@ in use failed at 2.58:1 on its own dark ground. See D-016 and
 ## One note on the transcript itself
 
 The exporter originally reported **151 operator prompts** for a session that had
-16. Claude Code returns tool results as user-role messages, and counting them as
+17. Claude Code returns tool results as user-role messages, and counting them as
 prompts overstated hand direction by roughly ten times.
 
 That was fixed before this file was generated, because it is the one figure a
@@ -132,6 +132,6 @@ reader of a shared session is most likely to draw a conclusion from. See D-010.
 The three page architecture and decisions document was written by hand, not
 generated.
 
-[`docs/DECISIONS.md`](../docs/DECISIONS.md) is the fuller record. It runs to 27
+[`docs/DECISIONS.md`](../docs/DECISIONS.md) is the fuller record. It runs to 30
 entries and includes the reversals, the measurements, and the things that turned
 out to be wrong.

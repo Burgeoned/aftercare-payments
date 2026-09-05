@@ -4,13 +4,14 @@ import { NextResponse } from "next/server";
 
 import { ACCESS_COOKIE, resolveAccess } from "@/lib/access";
 import { deriveBalance, healthAccountEligibleAmount } from "@/lib/domain/balance";
-import { parsePortion, resolvePayableAmount } from "@/lib/domain/intent";
+import { inFlightPayment, parsePortion, resolvePayableAmount } from "@/lib/domain/intent";
 import { STATEMENT_DESCRIPTOR } from "@/lib/domain/fixtures";
 import {
   appendPayment,
   findStatementById,
   indexPayment,
   paymentsForStatement,
+  readjudicationFor,
   refundsForPayments,
 } from "@/lib/domain/store";
 import { serverEnv } from "@/lib/env";
@@ -115,11 +116,40 @@ export async function POST(request: Request): Promise<NextResponse> {
   }
 
   const existing = await paymentsForStatement(statement.id);
+  /**
+   * The payer correction is passed here like everywhere else. It was omitted,
+   * and this was the only one of five callers that omitted it: the one that
+   * decides what to charge. A statement corrected downwards still derived its
+   * original residual here, so a patient returning to a settled statement would
+   * have been charged the difference again. See D-029.
+   */
   const balance = deriveBalance(
     statement,
     existing,
     await refundsForPayments(existing.map((p) => p.id)),
+    await readjudicationFor(statement.id),
   );
+
+  /**
+   * A payment the patient is in the middle of blocks a second one. The reuse
+   * path below covers an intent nobody has touched; this covers one already at
+   * the issuer, which cannot be reused and must not be duplicated. Without it a
+   * patient who loses a 3DS window and reopens the page is charged twice, and
+   * the balance absorbs it silently because the clamp hides an over-collection.
+   */
+  const inFlight = inFlightPayment(existing);
+  if (inFlight !== null) {
+    return NextResponse.json(
+      {
+        error: "payment_in_flight",
+        message:
+          "A payment on this statement is still being confirmed with your bank. " +
+          "Wait for it to finish before starting another.",
+        hyperswitchPaymentId: inFlight.hyperswitchPaymentId,
+      },
+      { status: 409 },
+    );
+  }
 
   const payable = resolvePayableAmount(
     balance,

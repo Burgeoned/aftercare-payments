@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { allocateRefund, overpaymentFrom } from "./refund";
+import { allocateRefund, claimedRefundTotal, overpaymentFrom } from "./refund";
 import { cents } from "./types";
 import type { Payment, Refund, TenderClass } from "./types";
 
@@ -174,5 +174,87 @@ describe("overpaymentFrom", () => {
 
   it("is zero when nothing was collected", () => {
     expect(overpaymentFrom(cents(0), cents(0), cents(0))).toBe(0);
+  });
+});
+
+describe("capacity across repeated refund rows", () => {
+  /**
+   * Found by a review pass, not by a test, and it is the third instance of the
+   * shape D-017 and D-026 describe. The provider route writes a pending row and
+   * the webhook writes a succeeded row for the same processor refund. Summing
+   * rows counts one refund twice and halves the capacity of the payment it came
+   * from, which then refuses a later correction that should have succeeded.
+   */
+  function tworows(paymentId: string, amount: number) {
+    return [
+      { ...refund(paymentId, amount, "pending"), hyperswitchRefundId: "ref_same" },
+      {
+        ...refund(paymentId, amount, "succeeded"),
+        hyperswitchRefundId: "ref_same",
+        updatedAt: "2026-09-03T10:00:00.000Z",
+      },
+    ];
+  }
+
+  it("counts one refund once however many rows describe it", () => {
+    const p = payment("a", 92700, "standard_card");
+    const result = allocateRefund([p], tworows("a", 22700), cents(70000));
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value[0]!.amount).toBe(70000);
+  });
+
+  it("still refuses more than the payment can give back", () => {
+    const p = payment("a", 92700, "standard_card");
+    expect(allocateRefund([p], tworows("a", 22700), cents(70001)).ok).toBe(false);
+  });
+
+  it("does not double the capacity of a payment with two succeeded rows", () => {
+    // Two log rows, one processor payment. Capacity is the payment, not the sum.
+    const intentRow = {
+      ...payment("intent", 92700, "standard_card"),
+      hyperswitchPaymentId: "pay_X",
+      status: "requires_payment_method" as const,
+    };
+    const settledRow = {
+      ...payment("settled", 92700, "standard_card"),
+      hyperswitchPaymentId: "pay_X",
+      updatedAt: "2026-09-01T11:00:00.000Z",
+    };
+
+    expect(allocateRefund([intentRow, settledRow], [], cents(92700)).ok).toBe(true);
+    expect(allocateRefund([intentRow, settledRow], [], cents(92701)).ok).toBe(false);
+  });
+});
+
+describe("claimedRefundTotal", () => {
+  it("counts pending as claimed, so a second correction cannot reissue it", () => {
+    /**
+     * The provider route decided from the balance's amountRefunded, which counts
+     * only succeeded refunds. Between issuing a refund and its webhook arriving
+     * that figure is zero, so submitting the same correction twice sent the
+     * money twice. Seconds for a card, days for ACH.
+     */
+    const p = payment("a", 92700, "standard_card");
+    expect(claimedRefundTotal([p], [refund("a", 22700, "pending")])).toBe(22700);
+  });
+
+  it("ignores a failed refund, which claimed nothing", () => {
+    const p = payment("a", 92700, "standard_card");
+    expect(claimedRefundTotal([p], [refund("a", 22700, "failed")])).toBe(0);
+  });
+
+  it("counts one refund once across a pending and a succeeded row", () => {
+    const p = payment("a", 92700, "standard_card");
+    const rows = [
+      { ...refund("a", 22700, "pending"), hyperswitchRefundId: "ref_same" },
+      {
+        ...refund("a", 22700, "succeeded"),
+        hyperswitchRefundId: "ref_same",
+        updatedAt: "2026-09-03T10:00:00.000Z",
+      },
+    ];
+    expect(claimedRefundTotal([p], rows)).toBe(22700);
   });
 });

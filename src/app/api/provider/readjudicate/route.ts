@@ -1,8 +1,16 @@
 import { randomUUID } from "node:crypto";
+import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 
+import { isStaff, STAFF_COOKIE } from "@/lib/staff";
+
 import { deriveBalance } from "@/lib/domain/balance";
-import { allocateRefund, overpaymentFrom, type Readjudication } from "@/lib/domain/refund";
+import {
+  allocateRefund,
+  claimedRefundTotal,
+  overpaymentFrom,
+  type Readjudication,
+} from "@/lib/domain/refund";
 import {
   appendRefund,
   findStatementByRef,
@@ -42,6 +50,15 @@ interface Body {
 }
 
 export async function POST(request: Request): Promise<NextResponse> {
+  /**
+   * Staff only. This endpoint changes state at the processor, and it was
+   * reachable by anyone on the internet until D-030. A deferral describes
+   * something not built; that was something exposed.
+   */
+  if (!isStaff((await cookies()).get(STAFF_COOKIE)?.value)) {
+    return NextResponse.json({ error: "unauthorised" }, { status: 401 });
+  }
+
   let body: Body;
   try {
     body = (await request.json()) as Body;
@@ -88,7 +105,17 @@ export async function POST(request: Request): Promise<NextResponse> {
   );
 
   const revised = cents(body.revisedPatientResponsibility);
-  const owedBack = overpaymentFrom(revised, before.amountPaid, before.amountRefunded);
+
+  /**
+   * Decided from what has been claimed, not from what has settled.
+   *
+   * `balance.amountRefunded` counts succeeded refunds only, which is right for
+   * the patient's balance and wrong here. Between issuing a refund and its
+   * webhook arriving, that figure is zero, so a second submission of the same
+   * correction computed the same amount owed and sent the money again. Seconds
+   * for a card, days for ACH. See D-029.
+   */
+  const owedBack = overpaymentFrom(revised, before.amountPaid, claimedRefundTotal(payments, refunds));
 
   const revision: Readjudication = {
     statementId: statement.id,

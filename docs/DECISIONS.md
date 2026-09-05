@@ -992,3 +992,96 @@ fails with `HE_03`.
 unknown rather than as empty. The two are not the same, and an operator reading
 "nothing is blocked" when the truth is "we could not ask" has been told the
 opposite of what is useful.
+
+---
+
+## D-029: three money bugs found by review, not by tests
+
+Date: 2026-09-05
+
+Three subagents were asked to audit the repository before submission. Two
+independently found the same defect, which is the one worth leading with.
+
+**The intent route was the only reader that ignored a payer correction.**
+`deriveBalance` takes the re-adjudication as its fourth argument. Five callers
+pass it. The intent route did not, and it is the one that decides what to
+charge. A statement corrected downwards displayed the corrected balance on every
+patient screen while the intent was created from the original line items, so a
+patient returning to a settled statement would have been charged the difference
+again. That is precisely the failure D-023 claims was closed.
+
+**`alreadyRefunded` summed refund rows without folding them.** The third
+instance of D-017 and D-026, in the last money computation that had not been
+audited for it. The provider route writes a pending row and the webhook writes a
+succeeded row for the same processor refund, so one refund counted twice and
+halved the capacity of the payment it came from. A later correction would then
+be refused for exceeding a capacity that was never really consumed, after the
+revised balance had already been recorded.
+
+**Re-adjudication decided from settled refunds and allocated against claimed
+ones.** `overpaymentFrom` was given `balance.amountRefunded`, which counts only
+succeeded refunds, while `allocateRefund` counted anything not failed. Between
+issuing a refund and its webhook arriving, the first figure is zero. Submitting
+the same correction twice in that window sent the money twice. Seconds for a
+card, days for ACH.
+
+**And an invariant that existed only as a comment.** `balance.ts` defines an
+`IN_FLIGHT` set with a comment saying a patient who refreshes during a 3DS
+challenge must not pay twice. It was used to derive a status string and nothing
+else. `resolvePayableAmount` refused only `transferred` and a zero balance, and
+`requires_customer_action` is deliberately excluded from D-027's reuse path, so
+a patient who lost a 3DS window and reopened the page got a second full-balance
+intent. Both charges succeed, the balance clamps at zero, and the
+over-collection is silent. Now enforced in `inFlightPayment`.
+
+**What this says about the tests.** All 128 passed throughout. Every one of
+these lives in a seam between two pieces of code that each looked correct: a
+caller omitting an argument, two functions filtering the same log differently, a
+comment describing an invariant nobody implemented. Fixtures do not produce
+seams, because the author of a fixture builds both sides to agree. That is the
+same lesson as D-026 and it has now cost four bugs, so it is worth stating as a
+rule: **anything derived twice must be derived by one function, and every reader
+of the log must fold it the same way.**
+
+---
+
+## D-030: the provider console was exposed, and a deferral was the wrong shape
+
+Date: 2026-09-05
+
+**Found by review, and it was live.** `SCOPE.md` item 10 deferred provider
+console authentication, arguing that a fake login is not authentication and that
+saying so is more honest than a password field proving nothing. That argument is
+sound and it was applied to the wrong thing.
+
+`POST /api/provider/readjudicate` issues refunds. `POST /api/provider/risk`
+toggles the merchant account's fraud guard and edits the blocklist. Both were
+deployed on a public URL with no credential of any kind. Verified against
+production: an unauthenticated POST reached input validation rather than an
+authentication check.
+
+**A deferral describes something not built. This was something exposed.** The
+distinction is the whole finding. Everything else in `SCOPE.md` is a flow that
+does not exist; this was a flow that existed, worked, and was reachable by
+anyone who guessed the path.
+
+**Decision.** A shared staff password, compared in constant time, exchanged for
+an HMAC-signed httpOnly session. Both pages redirect to a sign-in and both write
+endpoints answer 401 without it.
+
+**Why this is not the fake login the original deferral warned about.** A fake
+login is one that gates nothing or accepts anything. This checks a real secret
+that is not in the repository and issues a signed token that cannot be forged
+without the signing key. It is weaker than what a real deployment needs and it
+is not nothing.
+
+**Still deferred, and now honestly.** Per-user identity, SSO against the
+practice's identity provider, and an audit trail recording who applied a
+correction and against which remittance. Those are the things `SCOPE.md` item 10
+should have described, and the door being shut is what makes deferring them a
+choice rather than a hole.
+
+**The risk screen's own table said `Authentication on this console: Missing`.**
+It was right, and nobody read it as a live finding until a review pointed at the
+endpoints behind it. That is an argument for the table, and an argument against
+trusting anyone to act on a row that says missing.

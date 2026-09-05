@@ -1,3 +1,7 @@
+import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
+
+import { isStaff, STAFF_COOKIE } from "@/lib/staff";
 import Link from "next/link";
 
 import { PROVIDER_NAME } from "@/lib/domain/fixtures";
@@ -21,7 +25,10 @@ import { RiskConsole } from "./risk-console";
 
 export const dynamic = "force-dynamic";
 
-export default function RiskPage() {
+export default async function RiskPage() {
+  // The console moves money and controls the fraud guard. See D-030.
+  if (!isStaff((await cookies()).get(STAFF_COOKIE)?.value)) redirect("/provider/login");
+
   return (
     <main className="instrument" style={{ minHeight: "100vh" }}>
       <div className="wrap" style={{ paddingTop: "3.5rem", paddingBottom: "4.5rem" }}>
@@ -100,10 +107,8 @@ export default function RiskPage() {
                   </tr>
                   <tr>
                     <td>Authentication on this console</td>
-                    <td>
-                      <span className="flag-warn">Missing</span>
-                    </td>
-                    <td>Deliberate boundary, not an oversight. SCOPE.md item 10</td>
+                    <td>In place</td>
+                    <td>Shared staff password. Per-user identity deferred, D-030</td>
                   </tr>
                   <tr>
                     <td>3DS on high risk attempts</td>
@@ -118,9 +123,11 @@ export default function RiskPage() {
           </div>
 
           <p className="note note-warn" style={{ marginTop: "1.5rem" }}>
-            Four rows say missing. That is the point of the table. A risk page listing only
-            what is present tells an operator they are covered, which is the failure this
-            kind of screen exists to prevent.
+            Three rows say missing. That is the point of the table. A risk page listing
+            only what is present tells an operator they are covered, which is the failure
+            this kind of screen exists to prevent. The authentication row said missing
+            until a review found the endpoints behind it were reachable by anyone, which
+            is what a table like this is for.
           </p>
         </section>
 

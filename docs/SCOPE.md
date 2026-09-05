@@ -175,14 +175,19 @@ build step 7 addresses in the Hyperswitch dashboard rather than here.
 **What it is.** Staff authentication and an audit trail on
 `/api/provider/readjudicate` and the page that drives it.
 
-**Why deferred.** It is standard application security with no payments content,
-and a fake login is not authentication. The endpoint moves money out of the
-provider, so leaving it open and saying so is more honest than a password field
-that proves nothing.
+**Partially built, 2026-09-05, and the original deferral was wrong.** This entry
+used to argue that leaving the console open and saying so was more honest than a
+password field proving nothing. That reasoning is sound about fake logins and
+was applied to the wrong thing: the endpoints issue refunds and toggle the
+merchant's fraud guard, and they were reachable by anyone on the deployed URL. A
+deferral describes something not built. That was something exposed. See D-030.
 
-**How it would be built.** Provider staff are employees, so this is SSO against
-the practice's identity provider rather than passwords, with the acting user's
-identity written into the correction record. That record is already stored
+There is now a shared staff password exchanged for a signed session. What
+remains deferred is below, and it is deferred rather than open.
+
+**How the rest would be built.** Provider staff are employees, so per-user
+identity is SSO against the practice's identity provider rather than a shared
+password, with the acting user written into the correction record. That record is already stored
 separately from the statement, so attributing it costs one field. The audit
 requirement is the real one: a correction that moves money needs to say who
 applied it and on what remittance.

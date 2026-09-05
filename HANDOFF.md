@@ -29,7 +29,7 @@ outside the repository, so it is kept accurate rather than historical.
 - Vercel builds from source. The Dockerfile is the dev environment, not the
   deploy path. See D-005
 
-**Environment variables.** Seven, all documented in `.env.example`.
+**Environment variables.** Nine, all documented in `.env.example`.
 
 | Variable | Where it comes from |
 |---|---|
@@ -75,7 +75,9 @@ Verified against the Hyperswitch docs. Do not re-derive these, and do not assume
 anything beyond them.
 
 - Sandbox base URL: `https://sandbox.hyperswitch.io`
-- Payment creation: `POST /v1/payments`
+- Payment creation: `POST /payments`. The quickstart documents `/v1/payments`; the
+  API reference and this account use `/payments`, resolved empirically rather
+  than chosen. See D-007
 - Statuses: `requires_payment_method`, `requires_confirmation`,
   `requires_customer_action`, `processing`, `succeeded`, `failed`, `cancelled`
 - Manual capture: `capture_method: "manual"` yields `requires_capture`, then
@@ -92,10 +94,10 @@ anything beyond them.
 - Events acted on: `payment_succeeded`, `payment_failed`, `payment_processing`,
   `refund_succeeded`, `refund_failed`
 
-**Unresolved, resolve before writing the API client:** the exact HTTP header name
-for server-side authentication with the secret key. The API reference describes
-the key without naming the header. Check the Hyperswitch Postman collection or
-the dashboard's code samples. Do not guess and do not ship a guess.
+~~**Unresolved, resolve before writing the API client:** the exact HTTP header
+name for server-side authentication.~~ **Resolved:** `api-key` carrying the
+secret key, with the merchant account inferred from it. See `DESIGN.md` section
+15.
 
 ## Build order
 
@@ -272,8 +274,10 @@ Violating any of these is a defect, not a tradeoff.
    mark a statement paid from a redirect.
 4. **Every webhook is signature-verified before it is trusted.**
 5. **Money is `Cents`, an integer.** Never a float, never dollars.
-6. **Amounts are server-derived.** A client-supplied amount is validated against
-   the derived remaining balance, never trusted.
+6. **Amounts are server-derived.** ~~A client-supplied amount is validated
+   against the derived remaining balance, never trusted.~~ **Corrected by
+   D-015:** validation is not enough, because JSON parses `927.00` to the
+   integer `927`. The client names a portion and sends no number at all.
 7. **`Payment` and `Refund` are append-only. Statement status is derived.**
 
 ## Log your decisions as you go

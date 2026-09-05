@@ -1,4 +1,7 @@
+import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
+
+import { isStaff, STAFF_COOKIE } from "@/lib/staff";
 
 import { STATEMENTS } from "@/lib/domain/fixtures";
 import { summariseRisk } from "@/lib/domain/risk";
@@ -45,6 +48,10 @@ function isKind(value: unknown): value is BlocklistKind {
 }
 
 export async function GET(): Promise<NextResponse> {
+  if (!isStaff((await cookies()).get(STAFF_COOKIE)?.value)) {
+    return NextResponse.json({ error: "unauthorised" }, { status: 401 });
+  }
+
   const payments = await allPayments();
 
   /**
@@ -84,6 +91,15 @@ interface MutateBody {
 }
 
 export async function POST(request: Request): Promise<NextResponse> {
+  /**
+   * Staff only. This endpoint changes state at the processor, and it was
+   * reachable by anyone on the internet until D-030. A deferral describes
+   * something not built; that was something exposed.
+   */
+  if (!isStaff((await cookies()).get(STAFF_COOKIE)?.value)) {
+    return NextResponse.json({ error: "unauthorised" }, { status: 401 });
+  }
+
   let body: MutateBody;
   try {
     body = (await request.json()) as MutateBody;

@@ -1250,3 +1250,52 @@ two, one of them critical. Every fix in this log has been verified against the
 running application; none of these were, because they looked obviously correct.
 The rule that keeps holding is the one from D-026: the defects live in the seams
 between two pieces of code that each look right on their own.
+
+---
+
+## D-033: the fallback for a missing webhook was polling the webhook
+
+Date: 2026-09-05
+
+**Found by a hostile review pass, and it is the sharpest thing anyone found in
+this repository, because it undercuts the headline claim.**
+
+`DESIGN.md` section 6 says webhooks are the source of truth. That is right, and
+it is also at-least-once delivery over a network, which means a source of truth
+needs a repair path.
+
+There was none, and the thing standing in for one was circular. `/pay/return`
+polls `GET /api/statements/status`, which reads the derived balance, which reads
+the ledger, which only a webhook can move. So the documented "webhook never
+arrives" fallback in section 14 was polling a value that by construction cannot
+change without the event it is a fallback for. It was not a fallback. It was a
+longer wait, followed by a message telling the patient a receipt would appear.
+
+`getPayment` had been in the client since build step 2, used for intent reuse,
+and was never wired to recovery.
+
+**Decision.** `POST /api/statements/reconcile` asks the processor directly about
+every payment on the statement the ledger has not resolved, and appends what it
+learns. The return page calls it once before giving up rather than after.
+
+**Why this does not create a second source of truth.** A reconciled row goes
+into the same append-only log, carries the processor's own `updated` timestamp,
+and is read through the same fold as everything else. If a webhook arrives later
+for the same payment, the newer of the two wins on that field exactly as two
+webhooks would. Reconciliation cannot race a webhook to a different answer,
+because both are asking the processor the same question. That is the property
+that makes this a repair rather than a competing authority.
+
+**What it deliberately does not do.** It records only terminal statuses. A
+payment still at the issuer has no outcome to write, and writing an intermediate
+one would be guessing. It also writes nothing when the row it would produce
+could not win the fold, because a log that grows every time somebody refreshes
+is a log nobody reads.
+
+**Gated by the patient's own statement grant.** It repairs the one statement
+they are already looking at and cannot sweep anyone else's.
+
+**Still missing, and worth saying.** There is no scheduled sweep. A patient who
+closes the tab and never returns still has an unresolved intent, and nothing
+walks the ledger looking for them. The repair exists on the path where somebody
+is waiting; the background job is the obvious next piece and is not built.

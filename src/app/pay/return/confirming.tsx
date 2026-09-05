@@ -49,6 +49,7 @@ export function Confirming({
   useEffect(() => {
     let cancelled = false;
     let attempt = 0;
+    let reconciled = false;
 
     async function poll() {
       if (cancelled) return;
@@ -109,6 +110,30 @@ export function Confirming({
       }
 
       if (attempt >= SCHEDULE_MS.length) {
+        /**
+         * Before giving up, ask the processor directly. The poll above watches
+         * a ledger that only a webhook can move, so waiting longer cannot
+         * resolve an undelivered webhook. This can. See D-033.
+         */
+        if (!reconciled) {
+          reconciled = true;
+          try {
+            const repair = await fetch("/api/statements/reconcile", { method: "POST" });
+            if (repair.ok) {
+              const outcome = (await repair.json()) as { applied: unknown[] };
+              if (outcome.applied.length > 0) {
+                attempt = Math.max(attempt - 2, 0);
+                setTimeout(() => void poll(), 500);
+                return;
+              }
+            }
+          } catch {
+            // The repair is best effort. Falling through to the honest message
+            // is better than showing a network error for a payment that may
+            // well have succeeded.
+          }
+        }
+
         if (!cancelled) setPhase("timed_out");
         return;
       }
@@ -160,10 +185,10 @@ export function Confirming({
   if (phase === "timed_out") {
     return (
       <p className="note">
-        Your payment is still confirming with the bank. This is normal and does not mean
-        it failed. The balance updates as soon as the processor confirms it, and a receipt
-        will be available on your statement then. It is safe to close this page, and you
-        should not pay again.
+        Your payment is still confirming with the bank. We asked the processor directly
+        and it has not finished either, so this is a wait rather than a failure. The
+        balance updates as soon as it settles, and the receipt appears on your statement
+        then. It is safe to close this page, and you should not pay again.
       </p>
     );
   }

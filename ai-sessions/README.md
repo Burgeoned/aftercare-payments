@@ -110,10 +110,10 @@ the design already refused to treat the redirect as truth. See D-014 and D-006.
 
 **5. Where the model was told no.** Prompt 27.
 
-Asked to rebuild the interface in an existing brand, the answer was to take the
-method and refuse the brand: a consumer identity on a medical bill is
-incoherent, and a patient reading an unexpected charge needs low arousal rather
-than a strong voice. What transferred was the discipline, including measuring
+Asked to rebuild the interface in the author's existing YUNVO brand, the answer
+was to take the method and refuse the brand: a fitness and supplements identity
+on a medical bill is incoherent, and a patient reading an unexpected charge
+needs low arousal rather than a strong voice. What transferred was the discipline, including measuring
 contrast rather than estimating it, which immediately showed the accent already
 in use failed at 2.58:1 on its own dark ground. See D-016 and
 [`docs/DESIGN-SYSTEM.md`](../docs/DESIGN-SYSTEM.md).

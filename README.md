@@ -57,26 +57,46 @@ D-030. The password is supplied with the submission rather than printed here.
 | Health account recognition | BIN classification, not a payment method |
 | Split tender | Pay the HSA-eligible portion, settle the rest separately |
 | Verified webhook ingestion | HMAC-SHA512, idempotent, ordered |
-| Partial refund after re-adjudication | Health account payments drawn from last |
-| Decline handling | Normalized, actionable, tender-aware |
+| Partial refund after re-adjudication | Health account payments drawn from last, because returning money to a card has no tax consequence and returning it to an HSA does |
+| Decline handling | Normalized, actionable, and tender-aware: the same code means something different on a health account card |
+| Bank debit treated as provisional | ACH is collected, not paid, until the return window closes. The receipt says so rather than pretending both rails settle alike |
+| Reconciliation against the processor | A webhook that never arrives is repaired by asking, rather than by waiting longer |
+| Risk console with live blocklist and routing | Card testing signals from the ledger, Hyperswitch's blocklist and active routing algorithm read live, and an honest list of the controls that are missing |
 
 Deferred flows and the reasoning behind each are in
 [`docs/SCOPE.md`](docs/SCOPE.md).
 
 ## Documentation
 
-Read in this order.
+Eight documents is more than anyone reads. Here is the path.
+
+**If you have ten minutes.** [`docs/DOMAIN.md`](docs/DOMAIN.md) section 2, which
+is the one constraint the whole design follows from, and
+[`docs/DECISIONS.md`](docs/DECISIONS.md) D-015, which is the bug that best
+explains how this was built. Then open the live site and pay `AFT-4108-2290`.
+
+**If you have an hour**, in this order:
 
 | Document | What it covers |
 |---|---|
-| [`docs/DOMAIN.md`](docs/DOMAIN.md) | What healthcare patient billing needs from payments, before any architecture |
+| [`docs/DOMAIN.md`](docs/DOMAIN.md) | What healthcare patient billing needs from payments, before any architecture. Read this first or the rest looks arbitrary |
 | [`docs/DESIGN.md`](docs/DESIGN.md) | The architecture, and the requirement each decision serves |
-| [`docs/SCOPE.md`](docs/SCOPE.md) | What was built, what was deferred, and how each deferred flow would be approached |
-| [`src/lib/domain/types.ts`](src/lib/domain/types.ts) | The interface contract, written before implementation |
-| [`docs/DECISIONS.md`](docs/DECISIONS.md) | Every call made during the build, including the ones that were wrong |
-| [`docs/DESIGN-SYSTEM.md`](docs/DESIGN-SYSTEM.md) | Why it looks like this, with the contrast ratios measured |
-| [`HANDOFF.md`](HANDOFF.md) | Build brief: verified API facts, gated build order, invariants |
-| [`ai-sessions/`](ai-sessions/) | The AI sessions that produced this, and an index of the moments worth reading |
+| [`docs/SCOPE.md`](docs/SCOPE.md) | What was built, what was deferred, and how each deferred flow would be approached. The deferrals are the honest half |
+| [`docs/DECISIONS.md`](docs/DECISIONS.md) | Every call made during the build, including the wrong ones. Longest document here and the one that shows the most |
+
+**Reference, not reading.**
+[`src/lib/domain/types.ts`](src/lib/domain/types.ts) is the interface contract,
+written before implementation and changed deliberately.
+[`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) is how to run it.
+[`docs/DESIGN-SYSTEM.md`](docs/DESIGN-SYSTEM.md) explains why it looks like this,
+with the contrast ratios measured; it is off-brief for a payments role and is
+kept because the reasoning is the same reasoning.
+
+**Provenance.** [`HANDOFF.md`](HANDOFF.md) is the build brief an AI agent worked
+from, kept because the gated build order and the verified API facts are part of
+how this was made rather than part of what it is.
+[`ai-sessions/`](ai-sessions/) holds the session that built it and an index of
+the moments worth reading.
 
 ## Notable decisions
 

@@ -6,9 +6,10 @@ import type { Cents, Currency, PaymentStatus } from "@/lib/domain/types";
 /**
  * Thin server-side client for the Hyperswitch API.
  *
- * Deliberately not a full SDK wrapper. It covers the three calls this prototype
- * makes and nothing else, because every additional guessed field is a claim
- * about an API contract that has not been verified.
+ * Deliberately not a full SDK wrapper. It covers the calls this prototype makes
+ * and nothing else, because every additional guessed field is a claim about an
+ * API contract that has not been verified. The blocklist shapes at the bottom
+ * were taken from the documented curl examples rather than inferred.
  *
  * Auth is the `api-key` header carrying the secret key. The merchant account is
  * inferred from the key, so it is never sent explicitly. Confirmed against the
@@ -168,5 +169,62 @@ export async function createRefund(input: CreateRefundInput): Promise<Hyperswitc
       amount: input.amount,
       reason: input.reason,
     }),
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Blocklist
+// ---------------------------------------------------------------------------
+
+/**
+ * The card testing control.
+ *
+ * A payment page reachable by a statement reference is a card testing target:
+ * an attacker with a list of stolen card numbers needs somewhere cheap to
+ * discover which ones still work, and a public checkout that accepts any card
+ * for a small amount is exactly that. The reference is printed on paper, so it
+ * is not a secret.
+ *
+ * Configured by API rather than in the dashboard, which `HANDOFF.md` step 7
+ * originally got wrong. There is no separate card-testing guard: the blocklist
+ * toggle is it.
+ */
+export type BlocklistKind = "fingerprint" | "card_bin" | "extended_card_bin";
+
+export interface BlocklistEntry {
+  readonly fingerprint_id?: string;
+  readonly data_kind?: string;
+  readonly created_at?: string;
+  readonly metadata?: unknown;
+}
+
+/** Enables or disables the guard for the merchant account. */
+export async function toggleBlocklistGuard(enabled: boolean): Promise<unknown> {
+  return call<unknown>(`/blocklist/toggle?status=${enabled ? "true" : "false"}`, {
+    method: "POST",
+  });
+}
+
+export async function listBlocklist(kind: string): Promise<BlocklistEntry[]> {
+  const result = await call<BlocklistEntry[] | { data?: BlocklistEntry[] }>(
+    `/blocklist?data_kind=${encodeURIComponent(kind)}`,
+    { method: "GET" },
+  );
+  // The endpoint has returned both a bare array and a wrapped one across
+  // versions. Both are accepted rather than assuming either.
+  return Array.isArray(result) ? result : (result.data ?? []);
+}
+
+export async function addToBlocklist(type: BlocklistKind, data: string): Promise<unknown> {
+  return call<unknown>("/blocklist", {
+    method: "POST",
+    body: JSON.stringify({ type, data }),
+  });
+}
+
+export async function removeFromBlocklist(type: BlocklistKind, data: string): Promise<unknown> {
+  return call<unknown>("/blocklist", {
+    method: "DELETE",
+    body: JSON.stringify({ type, data }),
   });
 }

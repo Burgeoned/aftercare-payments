@@ -59,7 +59,10 @@ export default function ProviderPage() {
           </p>
         </div>
 
-        <p style={{ marginTop: "2rem" }}>
+        <p style={{ marginTop: "2rem", display: "flex", gap: "1.5rem" }}>
+          <Link href="/provider/risk" style={{ fontSize: "var(--fs-small)" }}>
+            Risk
+          </Link>
           <Link href="/" style={{ fontSize: "var(--fs-small)" }}>
             Patient view
           </Link>

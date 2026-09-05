@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { lookupStatement } from "@/lib/domain/lookup";
 import { ACCESS_COOKIE, ACCESS_TTL_SECONDS, grantAccess } from "@/lib/access";
+import { recordLookupFailure } from "@/lib/domain/store";
 
 /**
  * Guest statement lookup.
@@ -48,6 +49,10 @@ export async function POST(request: Request): Promise<NextResponse> {
   const result = await lookupStatement(body.ref, body.dateOfBirth);
 
   if (!result.ok) {
+    // Counted before responding. The response is deliberately uninformative, so
+    // the count is the only place a brute force attempt leaves a trace.
+    await recordLookupFailure();
+
     // One message for a missing reference and for a wrong date of birth. See
     // the note in lookup.ts: distinguishing them makes this an oracle for which
     // statement references exist.

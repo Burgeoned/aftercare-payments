@@ -168,3 +168,54 @@ export async function readjudicationFor(statementId: string): Promise<Readjudica
   if (raw === null || raw === undefined) return null;
   return typeof raw === "string" ? (JSON.parse(raw) as Readjudication) : raw;
 }
+
+// ---------------------------------------------------------------------------
+// Risk counters
+// ---------------------------------------------------------------------------
+
+function lookupFailureKey(day: string): string {
+  return `aftercare:lookup-failures:${day}`;
+}
+
+function today(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+/**
+ * Counts failed statement lookups.
+ *
+ * The lookup credential is a reference printed on paper plus a date of birth,
+ * and nothing currently slows an attacker down. Counting failures does not slow
+ * them down either, but it is the difference between a gap somebody can see and
+ * one nobody can. Rate limiting is the actual control and is deferred with a
+ * plan attached, see docs/SCOPE.md item 9.
+ *
+ * Kept per day and expiring after a week, because the useful question is
+ * whether today looks like yesterday.
+ */
+export async function recordLookupFailure(): Promise<void> {
+  const key = lookupFailureKey(today());
+  await redis().incr(key);
+  await redis().expire(key, 7 * 24 * 60 * 60);
+}
+
+export async function lookupFailuresByDay(days = 7): Promise<{ day: string; count: number }[]> {
+  const keys: string[] = [];
+  for (let i = 0; i < days; i += 1) {
+    keys.push(new Date(Date.now() - i * 86_400_000).toISOString().slice(0, 10));
+  }
+
+  const counts = await Promise.all(
+    keys.map(async (day) => ({
+      day,
+      count: Number((await redis().get<number | string>(lookupFailureKey(day))) ?? 0),
+    })),
+  );
+  return counts;
+}
+
+/** Every payment across every statement. The risk view reads the whole log. */
+export async function allPayments(): Promise<readonly Payment[]> {
+  const lists = await Promise.all(STATEMENTS.map((s) => paymentsForStatement(s.id)));
+  return lists.flat();
+}

@@ -1171,3 +1171,78 @@ independently confirms the connector is Stripe rather than the dummy one. That
 is the second time that question has been answered by something working rather
 than by looking: the first was a real refund settling, which the dummy connector
 cannot do.
+
+---
+
+## D-032: a review found the worst bug in this repository
+
+Date: 2026-09-05
+
+A second review pass, after the fixes in D-029 and D-030, found that one of
+those fixes had opened something worse than what it closed.
+
+**A patient's access cookie was a valid staff session.**
+
+`access.ts` signs `${statementId}.${expiry}`. `staff.ts` signs
+`${expiry}` behind a `staff.` prefix. Both used the same key and neither used a
+domain separator, and `isStaff` verified the signature without checking that the
+payload was a staff payload. The grammars were compatible, so the signature
+matched.
+
+Verified by test before fixing: `isStaff(grantAccess("stmt_4021"))` returned
+**true**.
+
+The consequence: any patient who looked up any statement received a cookie
+which, renamed from `aftercare_access` to `aftercare_staff`, granted the full
+provider console. Refunds. The merchant account's fraud guard. Reachable with a
+statement reference printed on a piece of paper and a date of birth, renewable
+indefinitely.
+
+That is the exposure D-030 was written to close, reintroduced through the
+patient front door by the fix itself, because the fix reused a key and a token
+grammar that were already occupied.
+
+**Fixed** with a domain separator in each HMAC, `aftercare.access.v1` and
+`aftercare.staff.v1`, plus a payload prefix check as a second lock. Both are now
+regression tested.
+
+**The lesson is narrower than "separate your keys".** Two token families signed
+with one key are only safe if no payload from one family can parse as a payload
+from the other, and nobody checks that property when adding the second family.
+A separator removes the need to check it.
+
+---
+
+**Three more from the same pass.**
+
+**The event claim was taken before the effect landed.** `claimEvent` marks an
+`event_id` used, then the ledger is written. If that write fails, the route
+throws, Hyperswitch retries, `claimEvent` reports a duplicate, and a succeeded
+payment is discarded permanently while the money has moved. The claim is now
+released when applying throws, so the retry finds the id free. A double apply is
+harmless because the balance folds by processor id; losing the event is not.
+
+**The staff password was validated in the shared `serverEnv` bundle**, which
+made the provider console's secret a precondition for statement lookup,
+checkout, and webhook ingestion. It took production down when the variable was
+added to the code before the deployment. `env.ts` already argues this exact case
+for keeping the Redis configuration separate, and the argument was not followed
+one function later. Now `staffEnv`.
+
+**The in-flight guard from D-029 was worse than the bug it fixed.** Refusing any
+new intent while one was in flight stopped the 3DS double charge and broke split
+tender: an ACH leg sits in `processing` for days, and the second leg is the flow
+this application exists to demonstrate. It also had no liveness bound, so an
+abandoned 3DS locked a patient out of their own bill forever.
+
+The question was wrong. It is not whether something is in flight, it is whether
+this request plus what is in flight exceeds what is owed. `wouldOverCollect`
+asks that instead. The route also now trusts the live processor status it
+already fetches for intent reuse: if the processor says the payment succeeded, a
+second intent is refused rather than created.
+
+**What this pass says about the last one.** D-029 closed four bugs and opened
+two, one of them critical. Every fix in this log has been verified against the
+running application; none of these were, because they looked obviously correct.
+The rule that keeps holding is the one from D-026: the defects live in the seams
+between two pieces of code that each look right on their own.

@@ -1,8 +1,8 @@
 import "server-only";
 
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 
-import { serverEnv } from "./env";
+import { serverEnv, staffEnv } from "./env";
 
 /**
  * Staff authentication for the provider console.
@@ -28,20 +28,33 @@ const TTL_MS = 8 * 60 * 60 * 1000;
 export const STAFF_COOKIE = "aftercare_staff";
 export const STAFF_TTL_SECONDS = TTL_MS / 1000;
 
+/**
+ * Domain separator, distinct from the one in access.ts. Two token families
+ * signed with one key and no separator verify each other's tokens. See D-032.
+ */
+const DOMAIN = "aftercare.staff.v1";
+
 function sign(payload: string): string {
-  return createHmac("sha256", serverEnv().sessionSecret).update(payload).digest("base64url");
+  return createHmac("sha256", serverEnv().sessionSecret)
+    .update(`${DOMAIN}|${payload}`)
+    .digest("base64url");
 }
 
+/**
+ * Compared as fixed-width digests so the comparison reveals nothing about the
+ * password's length. Buffers of differing length cannot be handed to
+ * `timingSafeEqual` at all, and short-circuiting on length is a length oracle:
+ * bounded, but a test comment previously claimed it did not exist.
+ */
 function constantTimeEquals(a: string, b: string): boolean {
-  const left = Buffer.from(a);
-  const right = Buffer.from(b);
-  if (left.length !== right.length) return false;
+  const left = createHash("sha256").update(a).digest();
+  const right = createHash("sha256").update(b).digest();
   return timingSafeEqual(left, right);
 }
 
 /** Verifies the shared password. Returns a session token, or null. */
 export function signIn(password: string): string | null {
-  const expected = serverEnv().staffPassword;
+  const expected = staffEnv().password;
   if (!constantTimeEquals(password, expected)) return null;
 
   const payload = `staff.${Date.now() + TTL_MS}`;
@@ -60,6 +73,10 @@ export function isStaff(token: string | undefined): boolean {
 
   if (provided.length !== expected.length) return false;
   if (!timingSafeEqual(provided, expected)) return false;
+
+  // The separator already makes another family's token unverifiable. This is
+  // the second lock: a staff payload must say so.
+  if (!payload.startsWith("staff.")) return false;
 
   const expiresAt = Number(payload.slice(payload.lastIndexOf(".") + 1));
   return Number.isFinite(expiresAt) && expiresAt > Date.now();

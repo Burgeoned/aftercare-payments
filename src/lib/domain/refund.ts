@@ -59,8 +59,25 @@ export type AllocationError =
  * have not landed, and two corrections in quick succession must not both
  * allocate them. Failed does not count, because it claimed nothing.
  */
-function alreadyRefunded(payment: Payment, refunds: readonly Refund[]): Cents {
-  const mine = refunds.filter((r) => r.paymentId === payment.id);
+function alreadyRefunded(
+  payment: Payment,
+  allRowsForPayment: readonly Payment[],
+  refunds: readonly Refund[],
+): Cents {
+  /**
+   * Matched against every log row for this processor payment, not just the
+   * folded survivor. A refund binds to whichever row its writer was holding,
+   * and the intent row and the webhook row are different rows. Narrowing to one
+   * loses refunds bound to the other, which is the defect `deriveBalance` and
+   * `settledActivity` already carry comments about. This function was the last
+   * reader that had not been brought into line.
+   */
+  const rowIds = new Set(
+    allRowsForPayment
+      .filter((p) => p.hyperswitchPaymentId === payment.hyperswitchPaymentId)
+      .map((p) => p.id),
+  );
+  const mine = refunds.filter((r) => rowIds.has(r.paymentId));
 
   return cents(
     latestPerProcessorId(mine, (r) => r.hyperswitchRefundId)
@@ -127,7 +144,7 @@ export function allocateRefund(
 
   const capacity = settled.map((payment) => ({
     payment,
-    available: cents(payment.amount - alreadyRefunded(payment, refunds)),
+    available: cents(payment.amount - alreadyRefunded(payment, payments, refunds)),
   }));
 
   const collected = cents(capacity.reduce((total, c) => total + Math.max(c.available, 0), 0));

@@ -143,6 +143,24 @@ export async function claimEvent(eventId: string): Promise<boolean> {
   return result === "OK";
 }
 
+/**
+ * Releases a claim whose effect did not land.
+ *
+ * The claim is taken before the ledger is written, so that two concurrent
+ * deliveries cannot both apply. That ordering has a cost: if the append then
+ * fails, the event id is burned, the retry is answered as a duplicate, and a
+ * succeeded payment is dropped permanently while the money has moved.
+ *
+ * Releasing on failure makes the claim conditional on the effect. The retry
+ * Hyperswitch is already going to send then finds the id free and applies it.
+ * The window in which a concurrent delivery could double-apply is the width of
+ * one failed write, and a double apply is harmless anyway because the balance
+ * folds by processor id. Losing the event is not harmless. See D-032.
+ */
+export async function releaseEvent(eventId: string): Promise<void> {
+  await redis().del(eventKey(eventId));
+}
+
 // ---------------------------------------------------------------------------
 // Payer corrections
 // ---------------------------------------------------------------------------

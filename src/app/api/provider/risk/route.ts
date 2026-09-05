@@ -25,8 +25,7 @@ import {
  * checked is worse than one that reports nothing: it tells an operator they are
  * protected without knowing whether they are.
  *
- * Same stated boundary as the rest of the provider surface: not authenticated.
- * See docs/SCOPE.md item 10.
+ * Staff only, like the rest of the provider surface. See D-030.
  */
 
 export const dynamic = "force-dynamic";

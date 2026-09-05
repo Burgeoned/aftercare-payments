@@ -35,10 +35,9 @@ import type { Refund } from "@/lib/domain/types";
  * responsibility. Here it is a number typed into a provider form, which is the
  * same shape with the EDI removed. See docs/SCOPE.md item 8.
  *
- * NOT AUTHENTICATED, and that is a stated prototype boundary rather than an
- * oversight. A real provider console sits behind staff authentication with an
- * audit trail, because this endpoint moves money out of the provider. It is
- * recorded in docs/SCOPE.md rather than half-built here.
+ * Staff only. This endpoint moves money out of the provider and was reachable
+ * by anyone until D-030. What is still deferred is per-user identity and an
+ * audit trail, see docs/SCOPE.md item 10.
  */
 
 export const dynamic = "force-dynamic";

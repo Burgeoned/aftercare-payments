@@ -110,3 +110,32 @@ export function inFlightPayment(payments: readonly Payment[]): Payment | null {
     ) ?? null
   );
 }
+
+/**
+ * Whether starting a payment now would over-collect.
+ *
+ * The first version of this guard refused any new intent while one was in
+ * flight, which stopped the double charge and broke split tender: an ACH leg
+ * sits in `processing` for days, and the second leg is the entire point of the
+ * flow. It also had no liveness bound, so an abandoned 3DS locked a patient out
+ * of their own bill permanently.
+ *
+ * The question is not whether something is in flight. It is whether this
+ * request plus what is already in flight exceeds what is owed. A patient paying
+ * the health account portion while a card leg settles is under the balance and
+ * should proceed. A patient re-submitting the full balance while the full
+ * balance is in flight is not. See D-032.
+ */
+export function wouldOverCollect(
+  payments: readonly Payment[],
+  remaining: Cents,
+  requested: Cents,
+): Payment | null {
+  const inFlight = latestPerProcessorId(payments, (p) => p.hyperswitchPaymentId).filter((p) =>
+    IN_FLIGHT.has(p.status),
+  );
+  if (inFlight.length === 0) return null;
+
+  const committed = inFlight.reduce((total, p) => total + p.amount, 0);
+  return committed + requested > remaining ? (inFlight[0] ?? null) : null;
+}

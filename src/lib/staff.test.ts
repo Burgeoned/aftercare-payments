@@ -17,6 +17,7 @@ beforeAll(() => {
 });
 
 const { signIn, isStaff } = await import("./staff");
+const { grantAccess } = await import("./access");
 
 describe("provider console sign in", () => {
   it("issues a session for the right password", () => {
@@ -34,6 +35,20 @@ describe("provider console sign in", () => {
     // The comparison is length-checked before it is byte-compared, so a prefix
     // cannot pass and cannot leak length through timing either.
     expect(signIn("correct-horse")).toBeNull();
+  });
+
+  it("does not accept a patient access token as a staff session", () => {
+    /**
+     * The worst bug found in this repository. Both modules signed with the same
+     * key and had compatible payload grammars, so a patient who looked up a
+     * statement received a cookie that, renamed, granted refunds and control of
+     * the fraud guard. Reachable with a reference printed on paper. See D-032.
+     */
+    expect(isStaff(grantAccess("stmt_4021"))).toBe(false);
+  });
+
+  it("rejects a session whose payload is not a staff payload", () => {
+    expect(isStaff("notstaff.99999999999999.x")).toBe(false);
   });
 
   it("rejects a forged session", () => {

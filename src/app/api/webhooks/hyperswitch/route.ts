@@ -9,6 +9,7 @@ import {
   appendRefund,
   claimEvent,
   paymentsForStatement,
+  releaseEvent,
   statementForPayment,
 } from "@/lib/domain/store";
 import { serverEnv } from "@/lib/env";
@@ -231,8 +232,21 @@ export async function POST(request: Request): Promise<NextResponse> {
     return ack("duplicate", { eventId: event.eventId });
   }
 
-  if (event.kind === "payment") return await applyPayment(event);
-  if (event.kind === "refund") return await applyRefund(event);
+  /**
+   * The claim is released if applying throws. Without this a transient store
+   * failure burns the event id, the retry is answered as a duplicate, and a
+   * payment that really succeeded is never recorded. That is the same shape as
+   * every other bug in this log: an effect claimed before it happened.
+   */
+  try {
+    if (event.kind === "payment") return await applyPayment(event);
+    if (event.kind === "refund") return await applyRefund(event);
+  } catch (error) {
+    await releaseEvent(event.eventId).catch(() => {
+      console.error("could not release the event claim", event.eventId);
+    });
+    throw error;
+  }
 
   // Disputes and mandates. Recorded in the log and not acted on.
   console.info("webhook received and not acted on", event.eventType, event.contentType);

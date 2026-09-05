@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 
 import { ACCESS_COOKIE, resolveAccess } from "@/lib/access";
 import { deriveBalance, healthAccountEligibleAmount } from "@/lib/domain/balance";
-import { inFlightPayment, parsePortion, resolvePayableAmount } from "@/lib/domain/intent";
+import { parsePortion, resolvePayableAmount, wouldOverCollect } from "@/lib/domain/intent";
 import { STATEMENT_DESCRIPTOR } from "@/lib/domain/fixtures";
 import {
   appendPayment,
@@ -130,33 +130,32 @@ export async function POST(request: Request): Promise<NextResponse> {
     await readjudicationFor(statement.id),
   );
 
-  /**
-   * A payment the patient is in the middle of blocks a second one. The reuse
-   * path below covers an intent nobody has touched; this covers one already at
-   * the issuer, which cannot be reused and must not be duplicated. Without it a
-   * patient who loses a 3DS window and reopens the page is charged twice, and
-   * the balance absorbs it silently because the clamp hides an over-collection.
-   */
-  const inFlight = inFlightPayment(existing);
-  if (inFlight !== null) {
-    return NextResponse.json(
-      {
-        error: "payment_in_flight",
-        message:
-          "A payment on this statement is still being confirmed with your bank. " +
-          "Wait for it to finish before starting another.",
-        hyperswitchPaymentId: inFlight.hyperswitchPaymentId,
-      },
-      { status: 409 },
-    );
-  }
-
   const payable = resolvePayableAmount(
     balance,
     portion.value,
     healthAccountEligibleAmount(statement),
   );
   if (!payable.ok) return fail(payable.error);
+
+  /**
+   * Checked once the amount is known, because the question is whether this
+   * request would over-collect rather than whether anything is in flight. Split
+   * tender legs stay under the balance and proceed; a re-submitted full balance
+   * does not. See D-032.
+   */
+  const clash = wouldOverCollect(existing, balance.remaining, payable.value);
+  if (clash !== null) {
+    return NextResponse.json(
+      {
+        error: "payment_in_flight",
+        message:
+          "A payment on this statement is still being confirmed with your bank. " +
+          "Wait for it to finish before starting another.",
+        hyperswitchPaymentId: clash.hyperswitchPaymentId,
+      },
+      { status: 409 },
+    );
+  }
 
   let env;
   try {
@@ -193,6 +192,24 @@ export async function POST(request: Request): Promise<NextResponse> {
       const live = await getPayment(reusable.hyperswitchPaymentId);
       const expired =
         live.expires_on !== undefined && new Date(live.expires_on).getTime() <= Date.now();
+
+      /**
+       * The processor's own view, which is newer than the ledger. If it says
+       * this payment already succeeded, a second intent would charge the
+       * patient twice for a balance the webhook has not recorded yet.
+       */
+      if (live.status === "succeeded" || live.status === "processing") {
+        return NextResponse.json(
+          {
+            error: "payment_in_flight",
+            message:
+              "A payment on this statement has already been submitted and is confirming. " +
+              "Wait for it to finish before starting another.",
+            hyperswitchPaymentId: live.payment_id,
+          },
+          { status: 409 },
+        );
+      }
 
       if (REUSABLE.has(live.status) && live.client_secret !== null && !expired) {
         return NextResponse.json({

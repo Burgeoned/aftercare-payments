@@ -48,11 +48,6 @@ export interface ServerEnv {
    * tokens, because compromising either one should not hand over the other.
    */
   readonly sessionSecret: string;
-  /**
-   * Shared secret for the provider console. Not per-user identity, which is
-   * still deferred, but a real secret rather than a decorative login.
-   */
-  readonly staffPassword: string;
   readonly appUrl: string;
 }
 
@@ -72,7 +67,6 @@ export function serverEnv(): ServerEnv {
     "HYPERSWITCH_PROFILE_ID",
     "HYPERSWITCH_WEBHOOK_SECRET",
     "AFTERCARE_SESSION_SECRET",
-    "AFTERCARE_STAFF_PASSWORD",
     "NEXT_PUBLIC_APP_URL",
   ]);
 
@@ -82,7 +76,6 @@ export function serverEnv(): ServerEnv {
     hyperswitchProfileId: v["HYPERSWITCH_PROFILE_ID"]!,
     hyperswitchWebhookSecret: v["HYPERSWITCH_WEBHOOK_SECRET"]!,
     sessionSecret: v["AFTERCARE_SESSION_SECRET"]!,
-    staffPassword: v["AFTERCARE_STAFF_PASSWORD"]!,
     appUrl: v["NEXT_PUBLIC_APP_URL"]!.replace(/\/+$/, ""),
   };
 
@@ -112,6 +105,28 @@ let cachedStore: StoreEnv | null = null;
  * this is the REST client, which suits a serverless caller that cannot hold a
  * connection open between invocations.
  */
+export interface StaffEnv {
+  readonly password: string;
+}
+
+let cachedStaff: StaffEnv | null = null;
+
+/**
+ * Validated separately, for the reason `storeEnv` is.
+ *
+ * This was folded into `serverEnv` and it took production down: the provider
+ * console's password became a precondition for statement lookup, checkout and
+ * webhook ingestion, none of which need it. A missing console password should
+ * break the console. It should not make Hyperswitch retry a payment webhook for
+ * 24 hours against a 500. See docs/DECISIONS.md D-032.
+ */
+export function staffEnv(): StaffEnv {
+  if (cachedStaff !== null) return cachedStaff;
+  const v = require_(["AFTERCARE_STAFF_PASSWORD"]);
+  cachedStaff = { password: v["AFTERCARE_STAFF_PASSWORD"]! };
+  return cachedStaff;
+}
+
 export function storeEnv(): StoreEnv {
   if (cachedStore !== null) return cachedStore;
 

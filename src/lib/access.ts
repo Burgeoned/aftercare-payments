@@ -25,8 +25,19 @@ const TTL_MS = 30 * 60 * 1000;
 export const ACCESS_COOKIE = "aftercare_access";
 export const ACCESS_TTL_SECONDS = TTL_MS / 1000;
 
+/**
+ * Domain separator. Without it, a token minted here verifies as a token minted
+ * anywhere else that signs with the same key, and the two modules that do so
+ * had compatible payload grammars: a patient access cookie renamed to the staff
+ * cookie was accepted as a staff session, which is refunds and the fraud guard
+ * reachable with a reference printed on paper. See docs/DECISIONS.md D-032.
+ */
+const DOMAIN = "aftercare.access.v1";
+
 function sign(payload: string): string {
-  return createHmac("sha256", serverEnv().sessionSecret).update(payload).digest("base64url");
+  return createHmac("sha256", serverEnv().sessionSecret)
+    .update(`${DOMAIN}|${payload}`)
+    .digest("base64url");
 }
 
 export function grantAccess(statementId: string): string {

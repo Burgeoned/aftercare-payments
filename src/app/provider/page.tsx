@@ -18,9 +18,8 @@ import { ReadjudicateForm } from "./readjudicate-form";
  * honest way to demonstrate a flow whose interesting half is what happens
  * afterwards. See docs/SCOPE.md item 8.
  *
- * Unauthenticated, and said out loud rather than quietly: this page moves money
- * out of the provider, so a real one sits behind staff authentication and an
- * audit trail. That is a stated prototype boundary.
+ * Behind a staff password. This page moves money out of the provider and was
+ * open until D-030. Per-user identity and an audit trail remain deferred.
  */
 
 export const dynamic = "force-dynamic";

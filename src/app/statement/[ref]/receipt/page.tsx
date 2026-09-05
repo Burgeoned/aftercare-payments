@@ -6,13 +6,14 @@ import { ACCESS_COOKIE, resolveAccess } from "@/lib/access";
 import { deriveBalance, settledActivity } from "@/lib/domain/balance";
 import { PROVIDER_NAME, STATEMENT_DESCRIPTOR } from "@/lib/domain/fixtures";
 import { formatUsd } from "@/lib/domain/money";
+import { describeTender } from "@/lib/domain/tender";
 import {
   findStatementByRef,
   findPatientById,
   paymentsForStatement,
   refundsForPayments,
 } from "@/lib/domain/store";
-import type { Payment, TenderDetail } from "@/lib/domain/types";
+import type { Payment } from "@/lib/domain/types";
 
 /**
  * The receipt.
@@ -40,19 +41,6 @@ function stamp(iso: string): string {
   });
 }
 
-function tenderLabel(tender: TenderDetail | null): string {
-  if (tender === null) return "Payment method not reported";
-
-  const method =
-    tender.class === "bank_debit"
-      ? "Bank account"
-      : tender.class === "health_account"
-        ? "Health account card"
-        : (tender.brand ?? "Card");
-
-  return tender.last4 === null ? method : `${method} ending ${tender.last4}`;
-}
-
 function PaymentRow({ payment }: { payment: Payment }) {
   return (
     <div
@@ -60,7 +48,9 @@ function PaymentRow({ payment }: { payment: Payment }) {
       style={{ padding: "1.1rem 0", display: "grid", gap: "0.3rem" }}
     >
       <div className="ledger-row" style={{ fontSize: "var(--fs-figure)", fontWeight: 600 }}>
-        <span>{tenderLabel(payment.tender)}</span>
+        <span className={payment.tender?.class === "health_account" ? "tender-health" : undefined}>
+          {describeTender(payment.tender)}
+        </span>
         <span className="num paid-mark">{formatUsd(payment.amount)}</span>
       </div>
       <p className="hint" style={{ margin: 0 }}>
@@ -127,8 +117,8 @@ export default async function ReceiptPage({ params }: { params: Promise<{ ref: s
           {activity.refunds.map((refund) => (
             <div key={refund.id} className="rule-top" style={{ padding: "1.1rem 0" }}>
               <div className="ledger-row" style={{ fontSize: "var(--fs-figure)", fontWeight: 600 }}>
-                <span>Refunded to your original payment method</span>
-                <span className="num">+{formatUsd(refund.amount)}</span>
+                <span className="refund-mark">Refunded to your original payment method</span>
+                <span className="num refund-mark">+{formatUsd(refund.amount)}</span>
               </div>
               <p className="hint" style={{ margin: "0.3rem 0 0" }}>
                 {stamp(refund.updatedAt)} &middot; after re-adjudication
@@ -151,6 +141,15 @@ export default async function ReceiptPage({ params }: { params: Promise<{ ref: s
             </div>
           </div>
         </div>
+
+        {activity.payments.some((p) => p.tender?.class === "health_account") && (
+          <p className="note" style={{ marginTop: "2rem" }}>
+            Part of this was paid with a health account card. If any of it is refunded,
+            the money returns to that same account rather than to another card, because
+            returning health account funds elsewhere turns a qualified distribution into
+            a taxable one.
+          </p>
+        )}
 
         <p className="note" style={{ marginTop: "2rem" }}>
           This receipt reflects payments confirmed by the payment processor, not the

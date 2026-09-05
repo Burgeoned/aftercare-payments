@@ -632,3 +632,77 @@ is no mail infrastructure here and pretending otherwise would be a screenshot of
 a feature. It says the descriptor that will appear on the card statement, which
 is the cheapest way to prevent the chargeback described in `SCOPE.md` item 6:
 the patient who does not recognise a line on their statement.
+
+---
+
+## D-021: health account recognition is a BIN lookup, and the table is not invented
+
+Date: 2026-09-04
+
+**Decision.** `src/lib/domain/tender.ts` classifies a card as `health_account`
+or `standard_card` by its issuer identification number, using the `card_isin`
+the webhook already carries. `bank_debit` is settled by `payment_method` before
+the BIN is consulted at all, because a bank account has no IIN and asking a
+range table about one is a category error.
+
+This is the claim `DOMAIN.md` section 5 makes, implemented: no processor exposes
+HSA or FSA as a payment method because it is not one, so recognition belongs in
+this application rather than at the connector.
+
+**Where the table comes from, and where it does not.** The authoritative health
+benefit IIN ranges are published by the card networks to SIGIS-registered
+merchants under licence. That data is not public and is not reproduced here.
+
+So the range table has two parts and the separation is the point. The licensed
+set is **empty**, deliberately, rather than filled with plausible looking
+numbers: an invented range that looks real is worse than no range, because it
+invites someone to trust it. The demonstration set contains sandbox test BINs,
+labelled as such, chosen so the flow is exercisable with cards anyone has:
+`5555 5555 5555 4444` classifies as a health account and
+`4242 4242 4242 4242` does not.
+
+**Which direction it fails.** An absent, short, or unrecognised BIN returns
+`standard_card`. Treating a health account card as standard means the patient is
+offered no health-account-specific handling, which is a degraded experience.
+Treating a standard card as a health account would tell them funds are eligible
+when they are not, and would later route a refund on a false premise. Only one
+of those has a tax consequence.
+
+**Verified end to end** against the running application with signed webhooks, on
+the mixed-eligibility statement:
+
+```
+health_account portion  $702.00 paid, remaining $225.00, status open
+full portion            $225.00 paid, remaining   $0.00, status paid
+receipt                 Health account card ending 4444   $702.00
+                        Visa ending 4242                  $225.00
+```
+
+That is the split tender scenario from `DESIGN.md` section 8, running.
+
+---
+
+## D-022: a refund gets its own colour, because direction is the point
+
+Date: 2026-09-04
+
+**Decision.** `--refund-light` `#35617f` at 5.93:1 on cream and `--refund-dark`
+`#8ec0dc` at 9.86:1 on the instrument. Deliberately off the paid ladder and not
+a severity colour.
+
+**Why not reuse the paid green.** A refund rendered in the same green as a
+payment differs from it only by a plus sign, and direction of money is the one
+thing a receipt exists to make unambiguous. A patient scanning a receipt and
+reading a refund as a second payment concludes they were charged twice.
+
+**Why not terracotta.** That colour already means "your plan did not cover
+this". Overloading it with "money came back" makes both meanings weaker, and a
+refund is not a warning.
+
+**Why the health account tender is marked with the accent instead.** It
+identifies a kind of instrument rather than reporting anything about the money,
+so it does not belong on the semantic scale at all.
+
+**Rejected alternative.** Colouring the outstanding balance. It is already the
+largest figure on the page and carries emphasis through size and weight; adding
+a fourth colour would dilute the three that mean something.

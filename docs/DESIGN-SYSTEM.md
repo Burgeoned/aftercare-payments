@@ -101,6 +101,17 @@ hover state. A colour from this table appearing without its meaning is a defect.
 | `--warn-dark` | `#d99a78` | 8.13:1 on dark | Same, on the instrument |
 | `--paid-light` | `#2f6b52` | 5.62:1 on cream | Money already collected |
 | `--paid-dark` | `#7dbb9c` | 8.70:1 on dark | Same, on the instrument |
+| `--refund-light` | `#35617f` | 5.93:1 on cream | Money returned to the patient |
+| `--refund-dark` | `#8ec0dc` | 9.86:1 on dark | Same, on the instrument |
+
+Refund is deliberately off the paid ladder and is not a severity colour. A
+refund is neither good news nor a warning, it is the other direction. Rendered
+in the same green as a payment it differs only by a plus sign, and direction of
+money is the one thing a receipt exists to make unambiguous.
+
+A health account tender is marked with the accent rather than a semantic colour,
+because it identifies a kind of instrument rather than reporting anything about
+the money.
 
 Terracotta itself, `#c97b5a`, measures **2.91:1 on cream** and is never used
 there. The warning colour on the document ground is the darker `#9a4a2c`.

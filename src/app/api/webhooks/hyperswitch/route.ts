@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 
+import { classifyTender } from "@/lib/domain/tender";
 import { cents } from "@/lib/domain/types";
 import {
   appendPayment,
@@ -42,22 +43,20 @@ function ack(outcome: string, detail?: Record<string, unknown>): NextResponse {
 }
 
 /**
- * Tender recorded from what the processor reported.
+ * Tender recorded from what the processor reported, classified at the BIN.
  *
- * `health_account` is not decided here. It is a BIN classification and needs
- * the restricted range table that build step 6 adds; guessing it from the card
- * network would be wrong in both directions. Until then a card is recorded as
- * a standard card and the BIN is available on the event for step 6 to use. See
- * docs/DOMAIN.md section 5.
+ * This is the point where a card stops being a card and becomes a health
+ * account credential or does not. Everything downstream that is specific to
+ * this vertical hangs off it: what the receipt says, and where a refund is
+ * allowed to go. See src/lib/domain/tender.ts.
  */
 function tenderFrom(event: PaymentEvent): TenderDetail | null {
-  if (event.last4 === null && event.cardNetwork === null) return null;
-
-  return {
-    class: "standard_card",
+  return classifyTender({
+    paymentMethod: event.paymentMethod,
+    cardIsin: event.cardIsin,
     last4: event.last4,
-    brand: event.cardNetwork,
-  };
+    cardNetwork: event.cardNetwork,
+  });
 }
 
 async function applyPayment(event: PaymentEvent): Promise<NextResponse> {

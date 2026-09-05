@@ -48,6 +48,8 @@ export interface PaymentEvent {
   readonly cardNetwork: string | null;
   /** First six digits, the BIN. Carries the health account classification. */
   readonly cardIsin: string | null;
+  /** `card`, `bank_debit`, and so on. Settles the tender class before the BIN. */
+  readonly paymentMethod: string | null;
   readonly failureReason: string | null;
 }
 
@@ -170,6 +172,7 @@ export function parseWebhook(body: unknown): WebhookEvent | ParseFailure {
       last4: card.last4,
       cardNetwork: card.network,
       cardIsin: card.isin,
+      paymentMethod: str(resource, "payment_method"),
       failureReason: str(resource, "error_message"),
     };
   }

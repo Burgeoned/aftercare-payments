@@ -58,6 +58,16 @@
   --paid-dark: #7dbb9c;                   /*  8.70:1 */
   --paid-light: #2f6b52;                  /*  5.62:1 */
 
+  /**
+   * Money going back to the patient. Deliberately off the paid ladder and not a
+   * severity colour: a refund is neither good news nor a warning, it is the
+   * other direction. A refund rendered in the same green as a payment differs
+   * from it only by a plus sign, and direction of money is the one thing a
+   * receipt exists to make unambiguous.
+   */
+  --refund-dark: #8ec0dc;                 /*  9.86:1 */
+  --refund-light: #35617f;                /*  5.93:1 */
+
   /* Type scale --------------------------------------------------------- */
   --fs-answer: clamp(3rem, 10vw, 4.75rem);
   --fs-hero: clamp(1.75rem, 5vw, 2.4rem);
@@ -453,4 +463,25 @@ body {
 
 .instrument .paid-mark {
   color: var(--paid-dark);
+}
+
+.refund-mark {
+  color: var(--refund-light);
+}
+
+.instrument .refund-mark {
+  color: var(--refund-dark);
+}
+
+/**
+ * Marks a health account tender. Uses the accent rather than a semantic colour,
+ * because it identifies a kind of instrument rather than reporting good or bad
+ * news about the money.
+ */
+.tender-health {
+  color: var(--accent-light);
+}
+
+.instrument .tender-health {
+  color: var(--accent-dark);
 }

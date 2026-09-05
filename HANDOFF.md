@@ -19,28 +19,55 @@ adjudication, stop and re-read `docs/DOMAIN.md` section 2.
 
 ## Environment state
 
-Confirmed working:
+Current as of 2026-09-05. This section is the only record of state that lives
+outside the repository, so it is kept accurate rather than historical.
+
+**Deployed.**
 
 - GitHub: https://github.com/Burgeoned/aftercare-payments, public, `main`
-- Hyperswitch sandbox account exists. API key, publishable key, and payment
-  response hash key are captured in `.env.local`, which is gitignored
-- Stripe test account exists
-- A connector is configured in the Hyperswitch dashboard
+- Production: https://aftercare-payments.vercel.app, built from `main` on push
+- Vercel builds from source. The Dockerfile is the dev environment, not the
+  deploy path. See D-005
 
-Outstanding before the webhook path can be tested end to end:
+**Environment variables.** Seven, all documented in `.env.example`.
 
-1. **Verify the connector is Stripe, not the dummy connector.** Dashboard →
-   Connectors. Dummy connector payments expire after 2 days and cannot be
-   refunded, which makes the partial refund flow undemonstrable. Stripe holding
-   an `sk_test_` key is what is required.
-2. **Profile id.** Dashboard → Settings → Business Profiles. Add to `.env.local`
-   as `HYPERSWITCH_PROFILE_ID`.
-3. **Vercel project.** Import the GitHub repo, capture the production URL.
-4. **Register the webhook endpoint.** Dashboard → Developers → Payment Settings →
-   Webhook Setup, pointed at `https://<vercel-url>/api/webhooks/hyperswitch`.
+| Variable | Where it comes from |
+|---|---|
+| `HYPERSWITCH_API_KEY` | Dashboard, Developers, API Keys. Secret |
+| `HYPERSWITCH_BASE_URL` | `https://sandbox.hyperswitch.io` |
+| `NEXT_PUBLIC_HYPERSWITCH_PUBLISHABLE_KEY` | Dashboard. Public by design, inlined into the bundle |
+| `HYPERSWITCH_PROFILE_ID` | Dashboard, Settings, Business Profiles |
+| `HYPERSWITCH_WEBHOOK_SECRET` | The profile's payment response hash key |
+| `AFTERCARE_SESSION_SECRET` | Generated. Signs guest access cookies, see D-013 |
+| `KV_REST_API_URL`, `KV_REST_API_TOKEN` | Set by the Vercel Upstash integration. Never entered by hand, see D-013 |
 
-Local dev needs a tunnel for webhooks, or deploy-to-test. Prefer deploying early
-and often over building a local tunnel setup.
+`NEXT_PUBLIC_APP_URL` is production on Vercel and `http://localhost:3000` in
+Development, and those must differ. It has no fallback in code for the reason in
+D-014.
+
+**Hyperswitch account state.**
+
+- Connector configured with cards and ACH debit. ACH is enabled and has never
+  been used, which `SCOPE.md` states rather than implying otherwise
+- Webhook endpoint registered at
+  `https://aftercare-payments.vercel.app/api/webhooks/hyperswitch`. The path
+  matters: pointing it at the origin sends webhooks to a page rather than a
+  route handler, and Hyperswitch retries a 404 for 24 hours before giving up
+- Blocklist guard enabled, card BIN `411111` blocked as a demonstration. Neither
+  demo card is in that range. See D-028
+- **The connector is not the dummy one, established without checking.** A real
+  partial refund settled against a real payment on 2026-09-04. Dummy connector
+  payments cannot be refunded, so a successful refund answers the question the
+  original version of this section asked somebody to verify by hand
+
+**Verified end to end against the live sandbox.**
+
+- Payment `pay_hz3mLO8GL41QrB5AgEN1`, $32.70, card, succeeded
+- Refund `ref_gmey0mFKKTTx5cRWbhBa`, $12.70, partial, after re-adjudication
+- Both moved the ledger only after a signature-verified webhook
+
+Webhooks cannot reach `localhost`. The ledger only advances on a deployed
+instance unless you tunnel, and deploying is easier.
 
 ## Confirmed API facts
 

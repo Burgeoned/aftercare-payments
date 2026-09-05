@@ -39,7 +39,13 @@ makes the split tender path appear on `AFT-4108-2290`. Any future expiry, any
 CVC.
 
 The billing office view is at [`/provider`](https://aftercare-payments.vercel.app/provider),
-where a simulated payer correction issues a real partial refund.
+where a simulated payer correction issues a real partial refund, and
+[`/provider/risk`](https://aftercare-payments.vercel.app/provider/risk) shows card
+testing signals beside the live Hyperswitch blocklist and routing configuration.
+
+Both are behind a staff password, because they move money out of the provider and
+control the fraud guard. It was open until a review pointed at it, which is
+D-030. The password is supplied with the submission rather than printed here.
 
 ## What is built
 

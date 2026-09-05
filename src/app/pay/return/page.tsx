@@ -35,7 +35,7 @@ export default async function ReturnPage({ searchParams }: ReturnPageProps) {
         </h1>
 
         <div className="panel">
-          <Confirming redirectStatus={status} />
+          <Confirming redirectStatus={status} paymentId={paymentId} />
         </div>
 
         <div className="panel" style={{ marginTop: "1.25rem" }}>

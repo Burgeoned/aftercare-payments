@@ -73,7 +73,7 @@ an append-only log does and what a fixture does not. Second bug of that exact
 shape. See D-017 and D-026.
 
 **3. A design assumption was falsified by instrumenting it, not by arguing.**
-Prompt 1.
+Prompt 2.
 
 `docs/DESIGN.md` section 12 chose in-memory fixtures and no database. Guest
 access grants were held in a `Map`, the lookup route wrote one, and the statement
@@ -108,7 +108,7 @@ succeeded and the confirmation was lost.
 It is also where the architecture paid for itself. No money was affected, because
 the design already refused to treat the redirect as truth. See D-014 and D-006.
 
-**5. Where the model was told no.** Prompt 27.
+**5. Where the model was told no.** Prompt 15.
 
 Asked to rebuild the interface in the author's existing YUNVO brand, the answer
 was to take the method and refuse the brand: a fitness and supplements identity
@@ -132,6 +132,6 @@ reader of a shared session is most likely to draw a conclusion from. See D-010.
 The three page architecture and decisions document was written by hand, not
 generated.
 
-[`docs/DECISIONS.md`](../docs/DECISIONS.md) is the fuller record. It runs to 30
+[`docs/DECISIONS.md`](../docs/DECISIONS.md) is the fuller record. It runs to 32
 entries and includes the reversals, the measurements, and the things that turned
 out to be wrong.

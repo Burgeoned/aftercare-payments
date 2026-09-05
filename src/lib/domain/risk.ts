@@ -24,6 +24,7 @@ export interface StatementRisk {
   readonly ref: string;
   readonly attempts: number;
   readonly failures: number;
+  readonly succeeded: number;
   /** Distinct card last-fours seen. The card testing signal. */
   readonly distinctCards: number;
   readonly lastAttemptAt: string | null;
@@ -33,6 +34,8 @@ export interface RiskSummary {
   readonly attempts: number;
   readonly failures: number;
   readonly succeeded: number;
+  /** Neither succeeded nor failed: created and never confirmed. */
+  readonly unresolved: number;
   readonly failureRate: number;
   readonly declineMix: readonly { category: DeclineCategory; count: number }[];
   readonly perStatement: readonly StatementRisk[];
@@ -90,6 +93,7 @@ export function summariseRisk(
       ref: statement.ref,
       attempts: latest.length,
       failures: latest.filter((p) => p.status === "failed").length,
+      succeeded: latest.filter((p) => p.status === "succeeded").length,
       distinctCards: cards.size,
       lastAttemptAt:
         latest.length === 0
@@ -101,6 +105,14 @@ export function summariseRisk(
   const attempts = perStatement.reduce((n, s) => n + s.attempts, 0);
   const failures = perStatement.reduce((n, s) => n + s.failures, 0);
 
+  /**
+   * Counted, not inferred. `attempts - failures` treated every unconfirmed
+   * intent as a success, and D-027 documents that abandoned intents sit in the
+   * log indefinitely. An operator risk screen reporting those as collected
+   * money is worse than reporting nothing.
+   */
+  const succeeded = perStatement.reduce((n, s) => n + s.succeeded, 0);
+
   const counts = new Map<DeclineCategory, number>();
   for (const payment of payments) {
     if (payment.status !== "failed") continue;
@@ -111,7 +123,8 @@ export function summariseRisk(
   return {
     attempts,
     failures,
-    succeeded: attempts - failures,
+    succeeded,
+    unresolved: attempts - failures - succeeded,
     failureRate: attempts === 0 ? 0 : failures / attempts,
     declineMix: [...counts.entries()]
       .map(([category, count]) => ({ category, count }))

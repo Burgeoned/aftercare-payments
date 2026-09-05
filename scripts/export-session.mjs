@@ -21,6 +21,7 @@
  *   node scripts/export-session.mjs --out ai-sessions
  *   node scripts/export-session.mjs --project <slug|path>  # another project's dir
  *   node scripts/export-session.mjs --session <id-prefix>  # one session only
+ *   node scripts/export-session.mjs --from <n>             # start at operator prompt n
  *   node scripts/export-session.mjs --redact <file>        # extra strings to remove
  *
  * `--project` exists because a transcript is filed under the working directory

@@ -174,8 +174,8 @@ export function ReadjudicateForm({ refs }: { refs: readonly string[] }) {
           )}
 
           <p className="note" style={{ marginTop: "1.25rem" }}>
-            Refunds are recorded as pending. The balance moves when a verified
-            `refund_succeeded` webhook arrives, exactly like a payment.
+            Refunds are recorded as pending. The balance moves when a
+            verified refund_succeeded webhook arrives, exactly like a payment.
           </p>
         </div>
       )}

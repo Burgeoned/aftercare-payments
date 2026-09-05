@@ -24,7 +24,7 @@ import {
 
 export const dynamic = "force-dynamic";
 
-export async function GET(): Promise<NextResponse> {
+export async function GET(request: Request): Promise<NextResponse> {
   const statementId = resolveAccess((await cookies()).get(ACCESS_COOKIE)?.value);
   if (statementId === null) {
     return NextResponse.json({ error: "no_access" }, { status: 401 });
@@ -45,6 +45,24 @@ export async function GET(): Promise<NextResponse> {
 
   const attempt = latestAttempt(statement, payments);
 
+  /**
+   * The redirect names the payment it came back from. Without it this endpoint
+   * can only report that the statement has collected something, which on the
+   * second leg of a split tender is already true because of the first leg. The
+   * patient was then sent to a receipt for the earlier payment while theirs was
+   * still confirming.
+   */
+  const asked = new URL(request.url).searchParams.get("payment_id");
+  const thisPayment =
+    asked === null
+      ? null
+      : payments
+          .filter((p) => p.hyperswitchPaymentId === asked)
+          .reduce<(typeof payments)[number] | null>(
+            (newest, row) => (newest === null || row.updatedAt > newest.updatedAt ? row : newest),
+            null,
+          );
+
   return NextResponse.json({
     ref: statement.ref,
     status: balance.status,
@@ -52,7 +70,12 @@ export async function GET(): Promise<NextResponse> {
     amountPaid: balance.amountPaid,
     // The category, not a sentence. The client renders the wording, so the two
     // cannot drift apart into two different explanations of one decline.
-    lastAttemptStatus: attempt?.status ?? null,
-    declineCategory: attempt?.status === "failed" ? attempt.failureReason : null,
+    lastAttemptStatus: (thisPayment ?? attempt)?.status ?? null,
+    declineCategory:
+      (thisPayment ?? attempt)?.status === "failed"
+        ? ((thisPayment ?? attempt)?.failureReason ?? null)
+        : null,
+    // Null when the redirect named no payment, which is the old behaviour.
+    thisPaymentSettled: thisPayment === null ? null : thisPayment.status === "succeeded",
   });
 }

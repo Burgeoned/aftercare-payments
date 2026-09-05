@@ -35,6 +35,22 @@ function attempt(
 }
 
 describe("summariseRisk", () => {
+  it("does not count an unconfirmed intent as a successful payment", () => {
+    /**
+     * `succeeded` was derived as `attempts - failures`, so every abandoned
+     * intent read as collected money on an operator risk screen. D-027 records
+     * that such rows sit in the log indefinitely.
+     */
+    const summary = summariseRisk(STATEMENTS, [
+      attempt("pay_1", "requires_payment_method", null, "1970-01-01T00:00:00.000Z"),
+    ]);
+
+    expect(summary.attempts).toBe(1);
+    expect(summary.succeeded).toBe(0);
+    expect(summary.failures).toBe(0);
+    expect(summary.unresolved).toBe(1);
+  });
+
   it("counts one attempt per processor payment, not per log row", () => {
     /**
      * The log holds an intent row and a webhook row for the same payment.

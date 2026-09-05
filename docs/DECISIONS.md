@@ -863,6 +863,10 @@ money out of the provider, so a real console sits behind staff authentication
 with an audit trail. Left open deliberately and recorded here rather than built
 halfway, because a fake login is not authentication.
 
+**Reversed by D-030 on 2026-09-05.** That reasoning is sound about fake logins
+and was applied to the wrong thing. The endpoint was not unbuilt, it was
+deployed and reachable by anyone. It is now behind a staff password.
+
 ---
 
 ## D-026: a refund belongs to a processor payment, not to a row describing it
@@ -995,7 +999,7 @@ opposite of what is useful.
 
 ---
 
-## D-029: three money bugs found by review, not by tests
+## D-029: four money bugs found by review, not by tests
 
 Date: 2026-09-05
 
@@ -1003,9 +1007,9 @@ Three subagents were asked to audit the repository before submission. Two
 independently found the same defect, which is the one worth leading with.
 
 **The intent route was the only reader that ignored a payer correction.**
-`deriveBalance` takes the re-adjudication as its fourth argument. Five callers
-pass it. The intent route did not, and it is the one that decides what to
-charge. A statement corrected downwards displayed the corrected balance on every
+`deriveBalance` takes the re-adjudication as its fourth argument. There are five
+callers; four passed it. The intent route was the fifth, and it is the one that
+decides what to charge. A statement corrected downwards displayed the corrected balance on every
 patient screen while the intent was created from the original line items, so a
 patient returning to a settled statement would have been charged the difference
 again. That is precisely the failure D-023 claims was closed.
@@ -1096,7 +1100,7 @@ Two gaps a review found, both places where a document claimed something the
 code did not do.
 
 **The statement descriptor was argued for and never sent.** `DESIGN.md` section
-10 lists `statement_descriptor` under what this application sends. It did not.
+10 lists a statement descriptor under what this application sends. It did not.
 The provider name was prefixed into `description`, which is an internal
 annotation and is not the field that reaches a bank statement. Meanwhile the
 receipt told the patient "charges appear on your statement as NORTHGATE HEALTH",

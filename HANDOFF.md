@@ -29,7 +29,7 @@ outside the repository, so it is kept accurate rather than historical.
 - Vercel builds from source. The Dockerfile is the dev environment, not the
   deploy path. See D-005
 
-**Environment variables.** Nine, all documented in `.env.example`.
+**Environment variables.** Ten, all documented in `.env.example`.
 
 | Variable | Where it comes from |
 |---|---|
@@ -39,10 +39,11 @@ outside the repository, so it is kept accurate rather than historical.
 | `HYPERSWITCH_PROFILE_ID` | Dashboard, Settings, Business Profiles |
 | `HYPERSWITCH_WEBHOOK_SECRET` | The profile's payment response hash key |
 | `AFTERCARE_SESSION_SECRET` | Generated. Signs guest access cookies, see D-013 |
+| `AFTERCARE_STAFF_PASSWORD` | Chosen. Gates the provider console, see D-030. Validated separately from the rest so a missing console password cannot take down the patient path, see D-032 |
 | `KV_REST_API_URL`, `KV_REST_API_TOKEN` | Set by the Vercel Upstash integration. Never entered by hand, see D-013 |
 
-`NEXT_PUBLIC_APP_URL` is production on Vercel and `http://localhost:3000` in
-Development, and those must differ. It has no fallback in code for the reason in
+`NEXT_PUBLIC_APP_URL` is the production URL on Vercel and `http://localhost:3000`
+in development, and those must differ. It has no fallback in code for the reason in
 D-014.
 
 **Hyperswitch account state.**

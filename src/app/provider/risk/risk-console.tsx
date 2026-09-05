@@ -24,6 +24,7 @@ interface RiskPayload {
     readonly attempts: number;
     readonly failures: number;
     readonly succeeded: number;
+    readonly unresolved: number;
     readonly failureRate: number;
     readonly declineMix: readonly { category: string; count: number }[];
     readonly perStatement: readonly StatementRisk[];
@@ -130,6 +131,10 @@ export function RiskConsole() {
               <span className="muted">Failed</span>
               <span>{risk.failures}</span>
             </div>
+            <div className="ledger-row">
+              <span className="muted">Never confirmed</span>
+              <span>{risk.unresolved}</span>
+            </div>
             <div className="ledger-row ledger-total">
               <span>Failure rate</span>
               <span>{(risk.failureRate * 100).toFixed(0)}%</span>
@@ -138,7 +143,8 @@ export function RiskConsole() {
 
           <p className="hint" style={{ marginTop: "1.25rem", marginBottom: 0 }}>
             Counted per processor payment, not per log row. An ordinary payment writes two
-            rows and is one attempt.
+            rows and is one attempt. Never confirmed means an intent was created and the
+            patient never completed it, which is abandonment rather than a decline.
           </p>
         </div>
       </section>
@@ -202,8 +208,8 @@ export function RiskConsole() {
               ))}
             </div>
             <p className="hint" style={{ marginTop: "1rem", marginBottom: 0 }}>
-              A run of `insufficient_funds` across many cards is the card testing shape.
-              A run of `incorrect_details` on one card is somebody mistyping.
+              A run of insufficient funds across many cards is the card testing shape.
+              A run of incorrect details on one card is somebody mistyping.
             </p>
           </div>
         )}

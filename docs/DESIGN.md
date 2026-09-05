@@ -69,7 +69,7 @@ matters because most patients open statements on a phone.
 ```
   Browser                     Next.js (Vercel)                  Hyperswitch
   ---------------------       ---------------------------       -------------------
-  Statement lookup    ---->   GET  /api/statements/:id
+  Statement lookup    ---->   POST /api/statements/lookup
                               (our data, no PHI leaves)
        <----------------      statement + line items
 
@@ -88,7 +88,7 @@ matters because most patients open statements on a phone.
   confirms directly   ------------------------------------->    confirm
   (PAN never touches our server)
 
-  3DS redirect if required, returns to /pay/:id/return
+  3DS redirect if required, returns to /pay/return
 
                                                         <----   webhook
                               POST /api/webhooks/hyperswitch
@@ -96,7 +96,7 @@ matters because most patients open statements on a phone.
                               apply state transition
                               mark statement paid
 
-  Receipt             <----   GET  /api/statements/:id
+  Receipt             <----   POST /api/statements/lookup
 ```
 
 Two things to notice.
@@ -307,13 +307,18 @@ shape of the data rather than by discipline.
 
 ```
 POST /api/statements/lookup          lookup by statement ref + DOB
+GET  /api/statements/status          derived status, polled by the return page
 POST /api/payments/intent            create Hyperswitch payment, return client_secret
-GET  /api/payments/:id               poll status, used only by the return page
 POST /api/webhooks/hyperswitch       verified webhook sink, source of truth
+POST /api/provider/session           staff sign in, see D-030
 POST /api/provider/readjudicate      simulate payer correction, issue partial refund
+GET  /api/provider/risk              risk signals, blocklist and routing, read live
+POST /api/provider/risk              blocklist changes
 ```
 
-Five routes. The `intent` route is the only one that talks to Hyperswitch on the
+Seven routes. `GET /api/payments/:id` was planned and never built: the return
+page polls the derived statement status instead, because a payment id tells a
+patient nothing their balance does not. The `intent` route is the only one that talks to Hyperswitch on the
 happy path, because confirmation happens browser to Hyperswitch directly.
 
 Statement lookup is a POST rather than the `GET /api/statements/:ref` this

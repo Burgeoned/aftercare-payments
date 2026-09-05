@@ -162,7 +162,7 @@ export function guidanceFor(category: DeclineCategory): DeclineGuidance {
         category,
         headline: "Some of the card details did not match",
         guidance:
-          "Check the number, expiry, security code and billing postcode, then try again. " +
+          "Check the number, expiry, security code and billing ZIP code, then try again. " +
           "Nothing has been charged.",
         // The one category where the same card genuinely is the right answer.
         retrySameMethod: true,

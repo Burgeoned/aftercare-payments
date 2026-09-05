@@ -173,8 +173,12 @@ export default async function ReceiptPage({ params }: { params: Promise<{ ref: s
             })}
             , which changed what you owe from{" "}
             {formatUsd(patientResponsibility(statement))} to{" "}
-            {formatUsd(balance.patientResponsibility)}. {revision.reason}. The difference
-            was returned to the card you paid with.
+            {formatUsd(balance.patientResponsibility)}. {revision.reason}.
+            {balance.amountRefunded > 0
+              ? " The difference was returned to the card you paid with."
+              : balance.remaining > 0
+                ? " Your remaining balance was reduced rather than refunded."
+                : " Nothing was over-collected, so no refund was due."}
           </p>
         )}
 

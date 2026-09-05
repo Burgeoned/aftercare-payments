@@ -30,9 +30,17 @@ interface StatusResponse {
   readonly amountPaid: number;
   readonly lastAttemptStatus: string | null;
   readonly declineCategory: string | null;
+  /** Null when the redirect named no payment. */
+  readonly thisPaymentSettled: boolean | null;
 }
 
-export function Confirming({ redirectStatus }: { redirectStatus: string }) {
+export function Confirming({
+  redirectStatus,
+  paymentId,
+}: {
+  redirectStatus: string;
+  paymentId: string | null;
+}) {
   const router = useRouter();
   const [phase, setPhase] = useState<Phase>("waiting");
   const [elapsed, setElapsed] = useState(0);
@@ -46,7 +54,12 @@ export function Confirming({ redirectStatus }: { redirectStatus: string }) {
       if (cancelled) return;
 
       try {
-        const res = await fetch("/api/statements/status", { cache: "no-store" });
+        const res = await fetch(
+          paymentId === null
+            ? "/api/statements/status"
+            : `/api/statements/status?payment_id=${encodeURIComponent(paymentId)}`,
+          { cache: "no-store" },
+        );
 
         if (res.status === 401) {
           if (!cancelled) setPhase("no_access");
@@ -75,8 +88,15 @@ export function Confirming({ redirectStatus }: { redirectStatus: string }) {
             return;
           }
 
-          // Any collected money means a webhook landed and the ledger moved.
-          if (body.amountPaid > 0) {
+          /**
+           * This payment, when the redirect named one. Falling back to "the
+           * statement has collected something" is only correct for a first
+           * payment; on a split tender second leg it is already true.
+           */
+          const settled =
+            body.thisPaymentSettled === null ? body.amountPaid > 0 : body.thisPaymentSettled;
+
+          if (settled) {
             if (!cancelled) {
               setPhase("settled");
               router.replace(`/statement/${encodeURIComponent(body.ref)}/receipt`);
@@ -103,7 +123,7 @@ export function Confirming({ redirectStatus }: { redirectStatus: string }) {
     return () => {
       cancelled = true;
     };
-  }, [router]);
+  }, [router, paymentId]);
 
   if (phase === "settled") {
     return <p className="muted">Confirmed. Taking you to your receipt.</p>;

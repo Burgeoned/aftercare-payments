@@ -901,3 +901,45 @@ side carries the interpretation, and every read of it has to fold the same way.
 This is the second bug of exactly this shape, after D-017. Both were silent,
 both involved money, and both came from one part of the code holding a different
 view of the log than another.
+
+---
+
+## D-027: an intent is reused rather than recreated
+
+Date: 2026-09-05
+
+**Defect, and one this session created a dozen instances of.** Every POST to
+`/api/payments/intent` created a new payment at the processor. A patient
+double-clicking, a component remount, or changing the split tender choice each
+produced a real Hyperswitch payment that nobody would ever confirm.
+
+Those orphans sit in `requires_payment_method` permanently, because nothing
+resolves a payment the patient never touched: no webhook arrives for a payment
+that never moved. They are reconciliation noise, they are not free, and on a
+statement with several of them the ledger stops being a readable account of what
+the patient did.
+
+**Decision.** Before creating, look for an existing payment on this statement
+with the same amount in a still-confirmable status, and ask the processor
+whether it is still usable. If it is, hand back its client secret.
+
+**Why ask the processor rather than trust the ledger.** Our log records what we
+last heard. The processor knows what is true now, and an intent expires without
+anyone telling us: the create response carries `expires_on`, roughly fifteen
+minutes out. Reusing a stale intent hands the browser a client secret that will
+be refused at confirmation, which is a worse failure than creating a second
+payment.
+
+**`requires_customer_action` is deliberately not reusable.** A payment in that
+state is mid-3DS with the patient on their bank's page. Handing a second browser
+the same secret is not reuse, it is a race.
+
+**A failed lookup falls through to creating a new intent.** Reuse is an
+optimisation. Refusing to take a payment because the optimisation could not be
+checked would trade a small cost for a total one.
+
+**What this is not.** It is not idempotency keyed on a client-supplied token,
+which is the general answer and what a production system should carry through
+the whole write path. This is narrower: it recognises the specific duplicate
+this application generates. The general version is worth having and is not
+pretended to be here.

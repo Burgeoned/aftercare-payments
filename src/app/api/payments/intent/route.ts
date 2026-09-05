@@ -14,7 +14,7 @@ import {
   refundsForPayments,
 } from "@/lib/domain/store";
 import { serverEnv } from "@/lib/env";
-import { createPayment, HyperswitchError } from "@/lib/hyperswitch/client";
+import { createPayment, getPayment, HyperswitchError } from "@/lib/hyperswitch/client";
 import type { Payment, PaymentError } from "@/lib/domain/types";
 
 /**
@@ -32,6 +32,18 @@ import type { Payment, PaymentError } from "@/lib/domain/types";
  */
 
 export const dynamic = "force-dynamic";
+
+/**
+ * Statuses where an existing payment can still be confirmed by the browser.
+ *
+ * `requires_customer_action` is deliberately absent. A payment in that state is
+ * mid-3DS with the patient on the issuer's page, and handing a second browser
+ * the same secret is not a reuse, it is a race.
+ */
+const REUSABLE: ReadonlySet<string> = new Set([
+  "requires_payment_method",
+  "requires_confirmation",
+]);
 
 const STATUS_FOR: Record<PaymentError["kind"], number> = {
   statement_not_found: 404,
@@ -127,6 +139,46 @@ export async function POST(request: Request): Promise<NextResponse> {
       },
       { status: 500 },
     );
+  }
+
+  /**
+   * Reuse an intent rather than create a second one.
+   *
+   * Without this, every mount of the checkout creates a real payment at the
+   * processor. A patient double-clicking, a remount, or changing the split
+   * tender choice each left an orphan sitting in `requires_payment_method`
+   * forever, because nothing resolves a payment the patient never confirmed.
+   * They are noise in reconciliation and they are not free.
+   *
+   * Reused only when the processor still agrees it is usable. Our ledger says
+   * what we last heard; the processor says what is true now, and an intent can
+   * expire without anyone telling us.
+   */
+  const reusable = existing
+    .filter((p) => p.amount === payable.value && REUSABLE.has(p.status))
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
+
+  if (reusable !== undefined) {
+    try {
+      const live = await getPayment(reusable.hyperswitchPaymentId);
+      const expired =
+        live.expires_on !== undefined && new Date(live.expires_on).getTime() <= Date.now();
+
+      if (REUSABLE.has(live.status) && live.client_secret !== null && !expired) {
+        return NextResponse.json({
+          paymentId: reusable.id,
+          hyperswitchPaymentId: live.payment_id,
+          clientSecret: live.client_secret,
+          amount: payable.value,
+          currency: statement.currency,
+          reused: true,
+        });
+      }
+    } catch (error) {
+      // A failed lookup is not a reason to refuse the payment. Fall through and
+      // create a fresh intent, which is the behaviour this replaced.
+      console.warn("could not reuse an existing intent", error);
+    }
   }
 
   let created;

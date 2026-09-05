@@ -50,6 +50,13 @@ export interface HyperswitchPayment {
    */
   readonly updated?: string;
   readonly created?: string;
+  /**
+   * When the payment stops being confirmable. Confirmed present on a live
+   * sandbox response; roughly fifteen minutes after creation. Reusing an
+   * intent past this point hands the browser a client secret that will be
+   * refused at confirmation.
+   */
+  readonly expires_on?: string;
 }
 
 export class HyperswitchError extends Error {

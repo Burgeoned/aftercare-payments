@@ -19,12 +19,12 @@ are not coming back.
 | Statement lookup without an account | Built | Patients pay from a paper or emailed statement. Forcing account creation is the single largest source of abandonment in this vertical |
 | Bill presentation with payer adjustment detail | Built | The explanation is the product. A patient who does not understand the residual calls the billing office or disputes the charge |
 | Card payment via Unified Checkout | Built | The default path, and the one that sets PCI scope |
-| Health account card recognition and tender classification | Built |  The domain-specific behavior, handled where it actually lives, at the BIN |
-| ACH debit as an alternative method | Connector configured, step 6 | The economics argument from `DOMAIN.md` section 6, made real |
-| Split tender across two payment attempts | Built |  Health account balances are finite. Without this, a patient with a partial FSA balance cannot pay at all |
-| Verified webhook ingestion as source of truth | Planned, step 5 | Money state does not come from a browser redirect |
-| Partial refund after simulated re-adjudication | Built |  The flow that separates this vertical from retail |
-| Decline handling with immediate alternative method | Built |  Highest-value error path in the vertical |
+| Health account card recognition and tender classification | Built | The domain-specific behavior, handled where it actually lives, at the BIN |
+| ACH debit as an alternative method | Connector configured, untested | The economics argument from `DOMAIN.md` section 6, made real |
+| Split tender across two payment attempts | Built | Health account balances are finite. Without this, a patient with a partial FSA balance cannot pay at all |
+| Verified webhook ingestion as source of truth | Built | Money state does not come from a browser redirect |
+| Partial refund after simulated re-adjudication | Built | The flow that separates this vertical from retail |
+| Decline handling with immediate alternative method | Built | Highest-value error path in the vertical |
 
 ## Deferred
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { deriveBalance, healthAccountEligibleAmount } from "./balance";
+import { deriveBalance, healthAccountEligibleAmount, settledActivity } from "./balance";
 import { STATEMENTS } from "./fixtures";
 import { cents } from "./types";
 import type { Payment, PaymentStatus, Refund, RefundStatus, Statement } from "./types";
@@ -262,6 +262,32 @@ describe("supersession", () => {
     );
 
     expect(balance.amountRefunded).toBe(1000);
+  });
+});
+
+describe("settledActivity", () => {
+  it("includes a refund bound to a superseded payment row", () => {
+    // The receipt reads through this. It had the same narrowing defect as the
+    // balance and dropped a real refund from the document the patient reads to
+    // find the money that came back.
+    const intentRow = {
+      ...payment("intent", OWED, "requires_payment_method"),
+      hyperswitchPaymentId: "pay_X",
+      updatedAt: "1970-01-01T00:00:00.000Z",
+    };
+    const settledRow = {
+      ...payment("settled", OWED, "succeeded"),
+      hyperswitchPaymentId: "pay_X",
+      updatedAt: "2026-08-05T10:05:00.000Z",
+    };
+
+    const activity = settledActivity(statement, [intentRow, settledRow], [
+      refund("r1", "intent", 1270, "succeeded"),
+    ]);
+
+    expect(activity.payments).toHaveLength(1);
+    expect(activity.refunds).toHaveLength(1);
+    expect(activity.refunds[0]!.amount).toBe(1270);
   });
 });
 

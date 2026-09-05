@@ -3,7 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { ACCESS_COOKIE, resolveAccess } from "@/lib/access";
-import { deriveBalance, settledActivity } from "@/lib/domain/balance";
+import { deriveBalance, patientResponsibility, settledActivity } from "@/lib/domain/balance";
 import { PROVIDER_NAME, STATEMENT_DESCRIPTOR } from "@/lib/domain/fixtures";
 import { formatUsd } from "@/lib/domain/money";
 import { describeTender } from "@/lib/domain/tender";
@@ -78,12 +78,8 @@ export default async function ReceiptPage({ params }: { params: Promise<{ ref: s
 
   const allPayments = await paymentsForStatement(statement.id);
   const allRefunds = await refundsForPayments(allPayments.map((p) => p.id));
-  const balance = deriveBalance(
-    statement,
-    allPayments,
-    allRefunds,
-    await readjudicationFor(statement.id),
-  );
+  const revision = await readjudicationFor(statement.id);
+  const balance = deriveBalance(statement, allPayments, allRefunds, revision);
   const activity = settledActivity(statement, allPayments, allRefunds);
 
   // Nothing has settled. Sending the patient to an empty receipt would suggest
@@ -101,7 +97,11 @@ export default async function ReceiptPage({ params }: { params: Promise<{ ref: s
         <p className="eyebrow">{PROVIDER_NAME} &middot; Receipt</p>
 
         <h1 className="hero-title mixed" style={{ margin: "1rem 0 0.5rem" }}>
-          {settled ? "Paid in full." : "Payment received."}
+          {balance.amountRefunded > 0
+            ? "Corrected, and settled."
+            : settled
+              ? "Paid in full."
+              : "Payment received."}
           <em>Statement {statement.ref}</em>
         </h1>
 
@@ -141,6 +141,12 @@ export default async function ReceiptPage({ params }: { params: Promise<{ ref: s
               <span className="muted">Paid</span>
               <span className="paid-mark">{formatUsd(balance.amountPaid)}</span>
             </div>
+            {balance.amountRefunded > 0 && (
+              <div className="ledger-row">
+                <span className="muted">Returned to you</span>
+                <span className="refund-mark">-{formatUsd(balance.amountRefunded)}</span>
+              </div>
+            )}
             <div className="ledger-row ledger-total">
               <span>{settled ? "Balance" : "Still owed"}</span>
               <span>{formatUsd(balance.remaining)}</span>
@@ -154,6 +160,21 @@ export default async function ReceiptPage({ params }: { params: Promise<{ ref: s
             the money returns to that same account rather than to another card, because
             returning health account funds elsewhere turns a qualified distribution into
             a taxable one.
+          </p>
+        )}
+
+        {revision !== null && (
+          <p className="note" style={{ marginTop: "2rem" }}>
+            Your insurer reprocessed this claim on{" "}
+            {new Date(revision.at).toLocaleDateString("en-US", {
+              year: "numeric",
+              month: "long",
+              day: "numeric",
+            })}
+            , which changed what you owe from{" "}
+            {formatUsd(patientResponsibility(statement))} to{" "}
+            {formatUsd(balance.patientResponsibility)}. {revision.reason}. The difference
+            was returned to the card you paid with.
           </p>
         )}
 

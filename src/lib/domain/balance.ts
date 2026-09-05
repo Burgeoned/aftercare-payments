@@ -193,12 +193,16 @@ export function settledActivity(
   payments: readonly Payment[],
   refunds: readonly Refund[],
 ): { readonly payments: readonly Payment[]; readonly refunds: readonly Refund[] } {
-  const mine = latestPerProcessorId(
-    payments.filter((p) => p.statementId === statement.id),
-    (p) => p.hyperswitchPaymentId,
-  ).filter((p) => p.status === "succeeded");
+  const rows = payments.filter((p) => p.statementId === statement.id);
+  const mine = latestPerProcessorId(rows, (p) => p.hyperswitchPaymentId).filter(
+    (p) => p.status === "succeeded",
+  );
 
-  const myIds = new Set(mine.map((p) => p.id));
+  // Every row, for the reason in deriveBalance: a refund is bound to whichever
+  // row its writer held, and narrowing to the settled ones drops refunds that
+  // really happened. A receipt that omits a refund is worse than one that omits
+  // a payment, because the patient is looking for the money that came back.
+  const myIds = new Set(rows.map((p) => p.id));
 
   return {
     payments: [...mine].sort((a, b) => a.updatedAt.localeCompare(b.updatedAt)),

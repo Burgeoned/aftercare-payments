@@ -56,7 +56,14 @@ function LedgerRow({
     <div className={`ledger-row${total ? " ledger-total" : ""}`}>
       <span className={total ? undefined : "muted"}>
         {label}
-        {note !== undefined && <span className="hint"> {note}</span>}
+        {/* Its own line. Separated by a space it ran on, so "Plan discount your
+            plan's contracted rate" read as one phrase rather than a figure and
+            a note about it. */}
+        {note !== undefined && (
+          <span className="hint" style={{ display: "block", marginTop: "0.15rem" }}>
+            {note}
+          </span>
+        )}
       </span>
       <span className={marked ? "paid-mark" : undefined}>{value}</span>
     </div>
@@ -231,7 +238,7 @@ export default async function StatementPage({ params }: { params: Promise<{ ref:
                   <LedgerRow label="Total billed" value={formatUsd(balance.totalCharged)} />
                   <LedgerRow
                     label="Plan discount"
-                    note="your plan's contracted rate"
+                    note="the rate your plan negotiated"
                     value={deduction(balance.payerAdjustment)}
                   />
                   <LedgerRow label="Plan paid" value={deduction(balance.payerPaid)} />

@@ -423,8 +423,14 @@ body {
 
 /** Marks a line the plan did not cover. Semantic, per the palette rules. */
 .flag-warn {
-  display: inline-block;
-  margin-left: 0.5rem;
+  /**
+   * Its own line under the service it annotates. Inline, it competed with a
+   * wrapping description for the same line and landed wherever the break fell,
+   * which on a phone reads as part of the service name rather than a note about
+   * it.
+   */
+  display: table;
+  margin-top: 0.4rem;
   font-family: var(--font-instrument), ui-sans-serif, system-ui, sans-serif;
   font-size: var(--fs-micro);
   font-weight: 600;

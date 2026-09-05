@@ -230,7 +230,35 @@ signals from the payment log. One further correction, found by calling the API
 rather than reading about it: the list endpoint's `data_kind` and the create
 endpoint's `type` are different vocabularies for the same concept. See D-028.
 
-**8. Deploy and test cold.** Public URL, on a phone, with no local state.
+**8. Deploy and test cold.** PARTIALLY DONE, 2026-09-05.
+
+Verified against the production URL with no prior session:
+
+```
+/                                200
+/statement/:ref                  307   grant required
+/statement/:ref/pay              307
+/statement/:ref/receipt          307
+POST /api/payments/intent        401   no cookie
+GET  /api/statements/status      401
+POST /api/webhooks/hyperswitch   401   unsigned
+cross-statement cookie           307   a grant opens one statement only
+```
+
+The full journey completes from a cold jar: lookup, statement, checkout. At a
+375px viewport the document is 375px wide with zero horizontal overflow, the
+statement table scrolls inside its own box, and the split tender chooser works.
+
+**Not verified, and it should be before submitting.** The Hyperswitch payment
+element did not render during the mobile pass. The cause is not this
+application: `beta.hyperswitch.io`, which serves the SDK, returned 429 to the
+test browser after a day of repeated loads. The same assets return 200 to a
+clean client, and server-side API calls to the sandbox were unaffected. So the
+card form on a phone remains untested rather than working or broken. Open it on
+an actual handset once, which is what this step asked for anyway.
+
+`DESIGN.md` section 15 open question 3, whether wallets render on a verified
+HTTPS domain, is still open for the same reason.
 
 ## Hard invariants
 

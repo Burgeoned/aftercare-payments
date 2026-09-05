@@ -233,23 +233,32 @@ Date: 2026-09-02
 
 **Problem.** Claude Code files a transcript under the working directory the
 session ran in, not the repo it produced. The session that wrote `DOMAIN.md`,
-`DESIGN.md`, `types.ts`, the scaffold, and D-001 through D-009 ran from
-`~/dev/job-hunt-lockin-2026`, so its transcript is filed there. Running
+`DESIGN.md`, `types.ts`, the scaffold, and D-001 through D-009 ran from a
+different directory, so its transcript was filed there rather than here. Running
 `npm run export-sessions` in this repo found only the session that noticed the
-problem. The deliverable had no source material where the tool looked.
+problem.
 
 **Decision.** The exporter takes `--project` to name another transcript
 directory and `--from` to begin at a given operator prompt. It prints a warning
 when reading outside this repo's directory, because the working-directory
 default is a safety property rather than a convenience.
 
-**Why `--from` rather than editing the file.** That session's first prompt
-carries job-hunt context that does not belong in a public repo, including
-compensation history and preparation notes for a different employer. Cutting it
-with a flag keeps the export reproducible and puts the cut in the header where a
+**Why `--from` rather than editing the file.** That session opened with
+unrelated personal context that does not belong in a public repo. Cutting it with
+a flag keeps the export reproducible and puts the cut in the header where a
 reader can see that something was withheld. Hand-trimming an exported transcript
 produces a file nobody can regenerate, which is the opposite of what sharing a
 session is supposed to demonstrate.
+
+**Reversed on 2026-09-05.** The earlier session is no longer exported at all. Its
+reasoning already exists in this repository in a better form: `DOMAIN.md`,
+`DESIGN.md`, `SCOPE.md`, the type contract, and D-001 through D-009 are what that
+session produced, written down deliberately rather than recovered from a
+transcript. Shipping a transcript from another working directory to explain a
+repository, when the repository already contains the conclusions, adds noise and
+a dependency on context the reader does not have. The `--project` and `--from`
+flags stay: the problem they solve is real, and the second half of D-011 is the
+record of deciding not to need them.
 
 **What the review found.** No live credentials. Every key-shaped string came
 through as `[REDACTED]`. The unrelated material was one contiguous block inside

@@ -132,8 +132,23 @@ async function applyRefund(event: RefundEvent): Promise<NextResponse> {
   }
 
   const payments = await paymentsForStatement(statementId);
-  const payment = payments.find((p) => p.hyperswitchPaymentId === event.hyperswitchPaymentId);
-  if (payment === undefined) return ack("unknown_payment");
+  const forPayment = payments.filter(
+    (p) => p.hyperswitchPaymentId === event.hyperswitchPaymentId,
+  );
+
+  /**
+   * Several rows describe one processor payment. Bind the refund to the settled
+   * one, falling back to the newest, rather than to whichever happens to be
+   * first in the log: the first row is usually the intent, written before the
+   * patient had even entered a card.
+   */
+  const payment =
+    forPayment.find((p) => p.status === "succeeded") ??
+    forPayment.reduce<Payment | null>(
+      (newest, row) => (newest === null || row.updatedAt > newest.updatedAt ? row : newest),
+      null,
+    );
+  if (payment === null || payment === undefined) return ack("unknown_payment");
 
   const refund: Refund = {
     id: randomUUID(),

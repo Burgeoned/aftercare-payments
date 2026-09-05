@@ -217,6 +217,36 @@ describe("supersession", () => {
     expect(balance.amountPaid).toBe(OWED);
   });
 
+  it("counts a refund bound to a superseded payment row", () => {
+    /**
+     * Found against a real refund. The intent route writes one row and the
+     * webhook writes another for the same processor payment. A refund can be
+     * bound to either, and taking payment ids from the folded set dropped any
+     * refund attached to the row the fold discarded. The money had really gone
+     * back and the balance did not know.
+     */
+    const intentRow = {
+      ...payment("intent", OWED, "requires_payment_method"),
+      hyperswitchPaymentId: "pay_X",
+      updatedAt: "1970-01-01T00:00:00.000Z",
+    };
+    const settledRow = {
+      ...payment("settled", OWED, "succeeded"),
+      hyperswitchPaymentId: "pay_X",
+      updatedAt: "2026-08-05T10:05:00.000Z",
+    };
+
+    const balance = deriveBalance(
+      statement,
+      [intentRow, settledRow],
+      // Bound to the row the fold throws away.
+      [refund("r1", "intent", 1270, "succeeded")],
+    );
+
+    expect(balance.amountRefunded).toBe(1270);
+    expect(balance.status).toBe("partially_refunded");
+  });
+
   it("counts one refund once across repeated rows", () => {
     const balance = deriveBalance(
       statement,

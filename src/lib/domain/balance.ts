@@ -124,11 +124,20 @@ export function deriveBalance(
   refunds: readonly Refund[],
   readjudication: Readjudication | null = null,
 ): StatementBalance {
-  const mine = latestPerProcessorId(
-    payments.filter((p) => p.statementId === statement.id),
-    (p) => p.hyperswitchPaymentId,
-  );
-  const myIds = new Set(mine.map((p) => p.id));
+  const rows = payments.filter((p) => p.statementId === statement.id);
+  const mine = latestPerProcessorId(rows, (p) => p.hyperswitchPaymentId);
+
+  /**
+   * Built from every row, not from the folded set.
+   *
+   * The log holds several rows per processor payment, and a refund is bound to
+   * whichever row the writer happened to hold. Taking ids from the folded set
+   * drops any refund attached to a row the fold discarded, which silently loses
+   * money that was really returned: a genuine refund_succeeded webhook was
+   * ignored exactly this way. Double counting is prevented by folding the
+   * refunds on their own processor id, not by narrowing this set.
+   */
+  const myIds = new Set(rows.map((p) => p.id));
 
   // Only succeeded money counts. A processing payment is not collected, and
   // treating it as collected is how a statement shows paid before it is.

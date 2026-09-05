@@ -853,3 +853,51 @@ let a correction silently charge someone.
 money out of the provider, so a real console sits behind staff authentication
 with an audit trail. Left open deliberately and recorded here rather than built
 halfway, because a fake login is not authentication.
+
+---
+
+## D-026: a refund belongs to a processor payment, not to a row describing it
+
+Date: 2026-09-05
+
+**Defect, found by issuing a real refund.** A genuine `refund_succeeded` webhook
+arrived, was verified, was recorded, and the balance ignored it. The statement
+kept saying `paid` while $12.70 had actually gone back to the patient's card.
+
+The log holds several rows for one processor payment: the intent route writes
+one, each webhook writes another. A refund is bound to whichever row the writer
+was holding at the time, and the two writers were holding different ones:
+
+```
+internal=4adb2938  pay_hz3m…  requires_payment_method   <- webhook bound the refund here
+internal=6760b715  pay_hz3m…  succeeded                 <- readjudicate bound its pending row here
+```
+
+`deriveBalance` folds payments to one row per processor payment, then built its
+set of payment ids from the *folded* result. The succeeded refund pointed at a
+row the fold had discarded, so it matched nothing and was dropped.
+
+**Two fixes, and the second is the real one.**
+
+The webhook now binds a refund to the settled row rather than to whichever is
+first in the log, because the first is usually the intent, written before the
+patient had entered a card.
+
+More importantly, the balance now takes payment ids from *every* row of the
+statement rather than from the folded set. A refund attached to any row of a
+payment is a refund of that payment. Double counting is still prevented, but by
+folding refunds on their own processor id, which is where that job belongs.
+
+**Why this was invisible until real money moved.** Every test constructed
+payments and refunds that agreed with each other, because a fixture author
+naturally binds a refund to the payment they just wrote. The disagreement only
+exists when two different pieces of code write rows for the same payment at
+different times, which is precisely what an append-only log does and precisely
+what a fixture does not. The regression test now builds the disagreement on
+purpose.
+
+**The general lesson, worth stating once.** An append-only log means the read
+side carries the interpretation, and every read of it has to fold the same way.
+This is the second bug of exactly this shape, after D-017. Both were silent,
+both involved money, and both came from one part of the code holding a different
+view of the log than another.

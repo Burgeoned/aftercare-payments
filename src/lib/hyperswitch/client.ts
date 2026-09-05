@@ -189,13 +189,42 @@ export async function createRefund(input: CreateRefundInput): Promise<Hyperswitc
  * originally got wrong. There is no separate card-testing guard: the blocklist
  * toggle is it.
  */
+/**
+ * What you can block. Used as `type` on create and delete.
+ */
 export type BlocklistKind = "fingerprint" | "card_bin" | "extended_card_bin";
+
+/**
+ * What you can list. Deliberately a different union.
+ *
+ * The same concept is named twice by this API: a stored instrument is
+ * `fingerprint` when you block it and `payment_method` when you list it.
+ * Querying the list with `fingerprint` returns 400, and the error is the only
+ * place the full set is documented:
+ *
+ *   unknown variant `fingerprint`, expected one of `payment_method`,
+ *   `card_bin`, `extended_card_bin`, `generic_card_bin`
+ *
+ * `generic_card_bin` appears in that message and in no documentation page found
+ * for this, which is why it is listed here and not used: an endpoint accepting a
+ * value is not the same as knowing what it means.
+ */
+export type BlocklistListKind =
+  | "payment_method"
+  | "card_bin"
+  | "extended_card_bin"
+  | "generic_card_bin";
 
 export interface BlocklistEntry {
   readonly fingerprint_id?: string;
   readonly data_kind?: string;
   readonly created_at?: string;
-  readonly metadata?: unknown;
+}
+
+interface BlocklistPage {
+  readonly count?: number;
+  readonly total_count?: number;
+  readonly data?: BlocklistEntry[];
 }
 
 /** Enables or disables the guard for the merchant account. */
@@ -205,13 +234,13 @@ export async function toggleBlocklistGuard(enabled: boolean): Promise<unknown> {
   });
 }
 
-export async function listBlocklist(kind: string): Promise<BlocklistEntry[]> {
-  const result = await call<BlocklistEntry[] | { data?: BlocklistEntry[] }>(
+export async function listBlocklist(kind: BlocklistListKind): Promise<BlocklistEntry[]> {
+  const result = await call<BlocklistEntry[] | BlocklistPage>(
     `/blocklist?data_kind=${encodeURIComponent(kind)}`,
     { method: "GET" },
   );
-  // The endpoint has returned both a bare array and a wrapped one across
-  // versions. Both are accepted rather than assuming either.
+  // The live account answers `{count, total_count, data}`. A bare array is
+  // accepted too rather than assuming the wrapper is permanent.
   return Array.isArray(result) ? result : (result.data ?? []);
 }
 

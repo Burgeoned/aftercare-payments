@@ -952,3 +952,43 @@ which is the general answer and what a production system should carry through
 the whole write path. This is narrower: it recognises the specific duplicate
 this application generates. The general version is worth having and is not
 pretended to be here.
+
+---
+
+## D-028: the blocklist names one concept two ways
+
+Date: 2026-09-05
+
+**Found by calling it.** The blocklist create and delete endpoints take a `type`
+of `fingerprint`, `card_bin` or `extended_card_bin`. The list endpoint takes a
+`data_kind`, and querying it with `fingerprint` returns 400:
+
+```
+unknown variant `fingerprint`, expected one of `payment_method`,
+`card_bin`, `extended_card_bin`, `generic_card_bin`
+```
+
+A stored instrument is `fingerprint` when you block it and `payment_method` when
+you list it. The client therefore carries two unions rather than one, which
+looks like duplication and is not.
+
+`generic_card_bin` appears in that error message and in no documentation page
+found for this feature. It is declared in the type and deliberately not used:
+an endpoint accepting a value is not the same as knowing what it means.
+
+**Documentation correction, second one for this feature.** `HANDOFF.md` step 7
+originally said the blocklist is configured in the dashboard. It is API only,
+and there is no separate card-testing guard: the blocklist toggle is the guard.
+That was corrected on 2026-09-04 from the docs. This entry is the correction the
+docs themselves needed.
+
+**State left on the account.** The guard is enabled
+(`blocklist_guard_status: enabled`) and card BIN `411111` is blocked as a
+demonstration entry. It is not a BIN any demo card uses, so the flow stays
+payable with `4242 4242 4242 4242` and `5555 5555 5555 4444`. A blocked payment
+fails with `HE_03`.
+
+**What the screen does with a failed blocklist read.** It reports the state as
+unknown rather than as empty. The two are not the same, and an operator reading
+"nothing is blocked" when the truth is "we could not ask" has been told the
+opposite of what is useful.

@@ -10,6 +10,7 @@ import {
   removeFromBlocklist,
   toggleBlocklistGuard,
   type BlocklistKind,
+  type BlocklistListKind,
 } from "@/lib/hyperswitch/client";
 
 /**
@@ -26,10 +27,21 @@ import {
 
 export const dynamic = "force-dynamic";
 
-const KINDS: readonly BlocklistKind[] = ["card_bin", "extended_card_bin", "fingerprint"];
+/**
+ * Two unions, because the API uses two vocabularies. `fingerprint` is what you
+ * block; `payment_method` is what you list. Querying the list with the blocking
+ * name returns 400.
+ */
+const LIST_KINDS: readonly BlocklistListKind[] = [
+  "card_bin",
+  "extended_card_bin",
+  "payment_method",
+];
+
+const BLOCK_KINDS: readonly BlocklistKind[] = ["card_bin", "extended_card_bin", "fingerprint"];
 
 function isKind(value: unknown): value is BlocklistKind {
-  return typeof value === "string" && KINDS.includes(value as BlocklistKind);
+  return typeof value === "string" && BLOCK_KINDS.includes(value as BlocklistKind);
 }
 
 export async function GET(): Promise<NextResponse> {
@@ -45,7 +57,7 @@ export async function GET(): Promise<NextResponse> {
 
   try {
     blocklist = await Promise.all(
-      KINDS.map(async (kind) => ({ kind, entries: [...(await listBlocklist(kind))] })),
+      LIST_KINDS.map(async (kind) => ({ kind, entries: [...(await listBlocklist(kind))] })),
     );
   } catch (error) {
     blocklistError =

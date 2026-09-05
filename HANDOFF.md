@@ -197,6 +197,12 @@ DELETE /blocklist
 
 A blocked payment fails with `HE_03`, "The payment is blocked".
 
+DONE, 2026-09-05. The guard is enabled on the account and a demonstration BIN is
+blocked. `/provider/risk` reads the blocklist live and derives card testing
+signals from the payment log. One further correction, found by calling the API
+rather than reading about it: the list endpoint's `data_kind` and the create
+endpoint's `type` are different vocabularies for the same concept. See D-028.
+
 **8. Deploy and test cold.** Public URL, on a phone, with no local state.
 
 ## Hard invariants

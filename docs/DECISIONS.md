@@ -706,3 +706,41 @@ so it does not belong on the semantic scale at all.
 **Rejected alternative.** Colouring the outstanding balance. It is already the
 largest figure on the page and carries emphasis through size and weight; adding
 a fourth colour would dilute the three that mean something.
+
+---
+
+## D-023: split tender is chosen before the payment exists
+
+Date: 2026-09-04
+
+**Decision.** `/statement/:ref/pay` asks which portion to pay before mounting
+checkout, and only when there is a real choice to make. A statement whose lines
+are all eligible, or none of them, goes straight to checkout, because offering a
+choice with one sensible answer is a question rather than an option.
+
+**Why the choice comes first.** The portion determines the amount and the amount
+is fixed when the intent is created. There is no way to mount a checkout and
+then change what it charges.
+
+**What the patient is protected from.** Without this, someone with an FSA card
+and a mixed statement enters that card against the full balance and is declined
+for ineligible spend or insufficient funds, with a processor decline code that
+explains nothing. The eligible figure is known before the card is entered, so it
+is shown before the card is entered.
+
+**The amount is still never sent by the browser.** The panel posts `"full"` or
+`"health_account"`. The server computes what each is worth. See D-015.
+
+**A duplication worth naming.** The panel computes the eligible figure for
+display and the server computes it again to charge. They are derived from the
+same statement by the same rule but they are two computations, and if they ever
+disagree the patient would see one number and be charged another. So the
+checkout now renders the amount from the intent response, which is the figure
+the server actually created the payment for. The patient sees the real number
+before confirming rather than on the receipt afterwards.
+
+**Known cost, not hidden.** Changing the choice after checkout has mounted
+creates a second intent and abandons the first. That is the idempotency gap
+already recorded in the architecture review: an abandoned intent sits in the log
+as `requires_payment_method` until a webhook resolves it, and nothing resolves
+one the patient never confirmed.

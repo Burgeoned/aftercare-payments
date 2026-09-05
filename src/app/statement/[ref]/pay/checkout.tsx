@@ -18,9 +18,9 @@ import { publishableKey } from "@/lib/env";
  * collected inside a Hyperswitch-hosted iframe and never reach our server,
  * which is what keeps PCI scope at SAQ A. See docs/DESIGN.md section 3.
  *
- * The intent request carries no amount. The server reads the statement from the
- * access cookie and derives the balance itself, so there is no number here for
- * a client to tamper with.
+ * The intent request names a portion, never an amount. The server reads the
+ * statement from the access cookie and computes what that portion is worth, so
+ * there is no number here for a client to tamper with. See D-015.
  */
 
 // Created once at module scope. Calling loadHyper on every render remounts the
@@ -79,7 +79,13 @@ function PayButton({ returnUrl }: { returnUrl: string }) {
   );
 }
 
-export function Checkout({ returnUrl }: { returnUrl: string }) {
+export function Checkout({
+  portion,
+  returnUrl,
+}: {
+  portion: "full" | "health_account";
+  returnUrl: string;
+}) {
   const [intent, setIntent] = useState<IntentResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -88,7 +94,11 @@ export function Checkout({ returnUrl }: { returnUrl: string }) {
 
     void (async () => {
       try {
-        const res = await fetch("/api/payments/intent", { method: "POST" });
+        const res = await fetch("/api/payments/intent", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ portion }),
+        });
         const body: unknown = await res.json();
 
         if (cancelled) return;
@@ -113,7 +123,7 @@ export function Checkout({ returnUrl }: { returnUrl: string }) {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [portion]);
 
   if (error !== null) {
     return (
@@ -135,7 +145,20 @@ export function Checkout({ returnUrl }: { returnUrl: string }) {
         <PayButton returnUrl={returnUrl} />
       </HyperElements>
       <p className="hint" style={{ marginTop: "1.5rem" }}>
-        Payment reference <span className="num">{intent.hyperswitchPaymentId}</span>
+        {/*
+          The amount the server actually created the intent for, not the one the
+          page computed to display. The two are derived independently, and if
+          they ever disagree the patient sees the figure they will really be
+          charged before they confirm rather than after.
+        */}
+        Charging{" "}
+        <span className="num">
+          {(intent.amount / 100).toLocaleString("en-US", {
+            style: "currency",
+            currency: intent.currency,
+          })}
+        </span>{" "}
+        &middot; reference <span className="num">{intent.hyperswitchPaymentId}</span>
       </p>
     </>
   );

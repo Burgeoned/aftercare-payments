@@ -6,10 +6,10 @@ import { ACCESS_COOKIE, resolveAccess } from "@/lib/access";
 import { healthAccountEligibleAmount } from "@/lib/domain/balance";
 import { PROVIDER_NAME } from "@/lib/domain/fixtures";
 import { viewStatement } from "@/lib/domain/lookup";
-import { formatUsd } from "@/lib/domain/money";
 import { findStatementByRef } from "@/lib/domain/store";
 import { serverEnv } from "@/lib/env";
-import { Checkout } from "./checkout";
+import type { Cents } from "@/lib/domain/types";
+import { PayPanel } from "./pay-panel";
 
 /**
  * Checkout for one statement.
@@ -48,7 +48,10 @@ export default async function PayStatementPage({
   if (balance.remaining === 0) redirect(`/statement/${encodeURIComponent(statement.ref)}`);
 
   const eligible = healthAccountEligibleAmount(statement);
-  const mixedEligibility = eligible > 0 && eligible < balance.patientResponsibility;
+
+  // Never offer more than is still owed. A patient who already paid part of the
+  // balance with another method must not be shown the full eligible figure.
+  const eligibleNow = (eligible < balance.remaining ? eligible : balance.remaining) as Cents;
 
   return (
     <main className="instrument" style={{ minHeight: "100vh" }}>
@@ -57,21 +60,11 @@ export default async function PayStatementPage({
           {PROVIDER_NAME} &middot; Statement {statement.ref}
         </p>
 
-        <p className="eyebrow" style={{ margin: "2.25rem 0 0.9rem" }}>
-          Paying now
-        </p>
-        <p className="answer">{formatUsd(balance.remaining)}</p>
-
-        {mixedEligibility && (
-          <p className="note note-warn" style={{ marginTop: "1.75rem" }}>
-            A health account card can cover {formatUsd(eligible)} of this. If you pay with
-            one, expect the rest to need a second method.
-          </p>
-        )}
-
-        <div className="panel" style={{ marginTop: "2.5rem" }}>
-          <Checkout returnUrl={`${serverEnv().appUrl}/pay/return`} />
-        </div>
+        <PayPanel
+          remaining={balance.remaining}
+          eligible={eligibleNow}
+          returnUrl={`${serverEnv().appUrl}/pay/return`}
+        />
 
         <p style={{ marginTop: "2rem" }}>
           <Link

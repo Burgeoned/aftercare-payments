@@ -70,6 +70,30 @@ function DueHeader({
   balance: StatementBalance;
   statementRef: string;
 }) {
+  if (balance.status === "settling") {
+    return (
+      <>
+        <p className="eyebrow" style={{ marginBottom: "0.9rem" }}>
+          Clearing
+        </p>
+        <p className="answer">{formatUsd(balance.patientResponsibility)}</p>
+        <p className="muted" style={{ marginTop: "1rem", maxWidth: "34rem" }}>
+          Received from your bank account. Bank debits take a few days to clear and can
+          still be returned in that time, so nothing is final yet. There is nothing for
+          you to do.
+        </p>
+        <div style={{ maxWidth: "20rem", marginTop: "2rem" }}>
+          <Link
+            href={`/statement/${encodeURIComponent(statementRef)}/receipt`}
+            className="btn btn-quiet"
+          >
+            View receipt
+          </Link>
+        </div>
+      </>
+    );
+  }
+
   if (balance.status === "paid") {
     return (
       <>

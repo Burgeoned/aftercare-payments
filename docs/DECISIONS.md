@@ -1299,3 +1299,55 @@ they are already looking at and cannot sweep anyone else's.
 closes the tab and never returns still has an unresolved intent, and nothing
 walks the ledger looking for them. The repair exists on the path where somebody
 is waiting; the background job is the obvious next piece and is not built.
+
+---
+
+## D-034: a bank debit is collected, not paid
+
+Date: 2026-09-05
+
+**Contract change, made deliberately.** `StatementStatus` gains `settling`.
+`types.ts` is the interface contract and is changed on purpose rather than
+incidentally, so this entry is the purpose.
+
+**Why.** ACH was enabled on the connector and rendering in the checkout, and a
+succeeded bank debit derived `paid`. A debit succeeds at submission and can be
+returned days later for an insufficient balance or a closed account, so `paid`
+was stating something the rail had not decided. A patient who paid by bank
+account and had it returned would have kept a statement reading paid in full
+forever.
+
+`SCOPE.md` item 2 described this fix and deferred it. That deferral was the same
+error as the provider console before D-030: a deferral describes something not
+built, and this was built, reachable, and wrong. The rule from D-030 applied to
+its own author.
+
+**What `settling` means.** Collected but not final. It is checked before `paid`
+in `deriveStatus`, so a zero balance reached by bank debit does not claim
+finality. The webhook handler can already walk a statement backwards out of it,
+because ordering compares the processor's timestamp rather than assuming forward
+progress, which is a property `DESIGN.md` section 6 claimed and this is the first
+flow to need.
+
+**The clock is an argument, not a read.** `deriveBalance` gained an `asOf`
+parameter rather than calling `Date.now()` internally. The function's purity is
+the reason the whole state machine is testable without a processor, and a hidden
+clock would have cost that to save one parameter. Tests place themselves either
+side of the window.
+
+**Five days is a simplification and is labelled as one.** The NACHA return
+window is two banking days for most return reasons and stretches to sixty for an
+unauthorised debit, so a real implementation holds per return code rather than
+per rail. Picking one number and calling it tuned would be worse than picking one
+and saying it is not.
+
+**What this still does not do.** Nothing consumes a returned-debit event. The
+statement leaves `settling` because the window expired, not because the bank
+said anything. The state and the patient-facing language are real; the return
+itself remains unhandled and `SCOPE.md` item 2 now says exactly that instead of
+deferring the whole thing.
+
+**The patient-facing consequence, which is the point.** The receipt for a card
+says paid. The receipt for a bank debit says it is clearing, that it can still
+be returned, that nothing more is owed unless it is, and that they will be told
+if it is. Two rails that settle differently should not produce one sentence.

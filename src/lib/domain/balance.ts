@@ -63,11 +63,28 @@ export function healthAccountEligibleAmount(statement: Statement): Cents {
   return sum(statement.lineItems.filter((l) => l.healthAccountEligible).map((l) => l.patientOwes));
 }
 
+/**
+ * How long a bank debit stays provisional.
+ *
+ * Five days is the prototype's number and it is a simplification worth naming.
+ * The NACHA window is two banking days for most return reasons and stretches to
+ * sixty for an unauthorised debit, so a real implementation holds per return
+ * code rather than per rail. Picking one number and calling it tuned would be
+ * worse than picking one and saying it is not.
+ */
+export const ACH_RETURN_WINDOW_DAYS = 5;
+
+function withinReturnWindow(settledAt: Timestamp, asOf: Timestamp): boolean {
+  const elapsed = new Date(asOf).getTime() - new Date(settledAt).getTime();
+  return Number.isFinite(elapsed) && elapsed < ACH_RETURN_WINDOW_DAYS * 86_400_000;
+}
+
 function deriveStatus(
   patientOwed: Cents,
   remaining: Cents,
   amountRefunded: Cents,
   hasInFlight: boolean,
+  settlingBankDebit: boolean,
 ): StatementStatus {
   /**
    * `transferred` is unreachable in the prototype. It is derived from a
@@ -83,6 +100,14 @@ function deriveStatus(
     // different and collapsing them hides the re-adjudication that caused it.
     return remaining >= patientOwed ? "refunded" : "partially_refunded";
   }
+
+  /**
+   * Checked before `paid`, because the whole point is that a collected bank
+   * debit is not yet paid. The webhook handler can already walk a statement
+   * backwards out of this, since ordering compares the processor's timestamp
+   * rather than assuming forward progress.
+   */
+  if (remaining === 0 && settlingBankDebit) return "settling";
 
   if (remaining === 0) return "paid";
   if (hasInFlight) return "payment_pending";
@@ -123,6 +148,11 @@ export function deriveBalance(
   payments: readonly Payment[],
   refunds: readonly Refund[],
   readjudication: Readjudication | null = null,
+  /**
+   * Passed rather than read, so this function stays pure and a test can place
+   * itself either side of the ACH return window.
+   */
+  asOf: Timestamp = new Date().toISOString(),
 ): StatementBalance {
   const rows = payments.filter((p) => p.statementId === statement.id);
   const mine = latestPerProcessorId(rows, (p) => p.hyperswitchPaymentId);
@@ -176,6 +206,12 @@ export function deriveBalance(
       remaining,
       amountRefunded,
       mine.some((p) => IN_FLIGHT.has(p.status)),
+      mine.some(
+        (p) =>
+          p.status === "succeeded" &&
+          p.tender?.class === "bank_debit" &&
+          withinReturnWindow(p.updatedAt, asOf),
+      ),
     ),
   };
 }

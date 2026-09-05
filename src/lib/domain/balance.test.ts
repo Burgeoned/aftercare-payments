@@ -306,3 +306,71 @@ describe("healthAccountEligibleAmount", () => {
     expect(healthAccountEligibleAmount(statement)).toBe(balance.patientResponsibility);
   });
 });
+
+describe("bank debit is provisional", () => {
+  function achPayment(amount: number, updatedAt: string): Payment {
+    return {
+      ...payment("ach", amount, "succeeded"),
+      tender: { class: "bank_debit", last4: "6789", brand: null },
+      updatedAt,
+    };
+  }
+
+  const SETTLED_AT = "2026-09-01T10:00:00.000Z";
+
+  it("reads as settling inside the return window, not paid", () => {
+    /**
+     * An ACH debit succeeds at submission and can be returned days later. A
+     * statement saying "paid" during that window states something the rail has
+     * not decided. See SCOPE.md item 2.
+     */
+    const balance = deriveBalance(
+      statement,
+      [achPayment(OWED, SETTLED_AT)],
+      [],
+      null,
+      "2026-09-03T10:00:00.000Z",
+    );
+
+    expect(balance.remaining).toBe(0);
+    expect(balance.status).toBe("settling");
+  });
+
+  it("reads as paid once the window closes", () => {
+    const balance = deriveBalance(
+      statement,
+      [achPayment(OWED, SETTLED_AT)],
+      [],
+      null,
+      "2026-09-20T10:00:00.000Z",
+    );
+
+    expect(balance.status).toBe("paid");
+  });
+
+  it("does not make a card payment provisional", () => {
+    // Cards settle immediately. Only the rail that can be returned waits.
+    const balance = deriveBalance(
+      statement,
+      [payment("card", OWED, "succeeded")],
+      [],
+      null,
+      "2026-08-05T10:00:01.000Z",
+    );
+
+    expect(balance.status).toBe("paid");
+  });
+
+  it("still shows a remaining balance when the debit only covers part", () => {
+    const balance = deriveBalance(
+      statement,
+      [achPayment(2000, SETTLED_AT)],
+      [],
+      null,
+      "2026-09-03T10:00:00.000Z",
+    );
+
+    expect(balance.remaining).toBe(1270);
+    expect(balance.status).toBe("open");
+  });
+});

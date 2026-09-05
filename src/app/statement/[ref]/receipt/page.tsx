@@ -90,6 +90,7 @@ export default async function ReceiptPage({ params }: { params: Promise<{ ref: s
   }
 
   const settled = balance.remaining === 0;
+  const settling = balance.status === "settling";
 
   return (
     <main className="document" style={{ minHeight: "100vh" }}>
@@ -99,9 +100,11 @@ export default async function ReceiptPage({ params }: { params: Promise<{ ref: s
         <h1 className="hero-title mixed" style={{ margin: "1rem 0 0.5rem" }}>
           {balance.amountRefunded > 0
             ? "Corrected, and settled."
-            : settled
-              ? "Paid in full."
-              : "Payment received."}
+            : settling
+              ? "Received, and clearing."
+              : settled
+                ? "Paid in full."
+                : "Payment received."}
           <em>Statement {statement.ref}</em>
         </h1>
 
@@ -179,6 +182,17 @@ export default async function ReceiptPage({ params }: { params: Promise<{ ref: s
               : balance.remaining > 0
                 ? " Your remaining balance was reduced rather than refunded."
                 : " Nothing was over-collected, so no refund was due."}
+          </p>
+        )}
+
+        {settling && (
+          <p className="note note-warn" style={{ marginTop: "2rem" }}>
+            You paid from a bank account. Bank debits clear over the following few days
+            and can still be returned in that time, for an insufficient balance or a
+            closed account, so this is not final yet. Nothing more is owed unless the
+            debit is returned, and you will be told if it is. A card would have settled
+            immediately; these two work differently and this receipt says so rather than
+            treating them alike.
           </p>
         )}
 

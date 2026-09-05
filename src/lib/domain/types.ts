@@ -117,7 +117,22 @@ export interface LineItem {
  * is worse than declining. See docs/SCOPE.md item 7.
  */
 export type StatementStatus =
-  "open" | "payment_pending" | "paid" | "partially_refunded" | "refunded" | "transferred";
+  | "open"
+  | "payment_pending"
+  /**
+   * Collected, but not yet final. A bank debit succeeds at submission and can
+   * be returned days later for insufficient funds or a closed account, so
+   * treating ACH success as `paid` states something the rail has not decided.
+   *
+   * This is the one state a card never enters. It exists because the two rails
+   * do not settle alike and the receipt should not pretend they do. See
+   * docs/SCOPE.md item 2 and docs/DECISIONS.md D-034.
+   */
+  | "settling"
+  | "paid"
+  | "partially_refunded"
+  | "refunded"
+  | "transferred";
 
 export interface Statement {
   readonly id: string;

@@ -51,13 +51,32 @@ because the balance is frequently disputed rather than abandoned.
 
 ### 2. ACH return handling
 
+**Partially built, 2026-09-05.** The provisional state exists; the return itself
+is still unhandled, and that split is the honest description.
+
 **What it is.** ACH debits succeed at submission and can return days later for
 insufficient funds or a closed account.
 
-**Why deferred.** Depends on whether the sandbox connector can simulate a return.
-See `DESIGN.md` section 15.
+**What was wrong with deferring all of it.** ACH is enabled on the connector and
+renders in the checkout, so a patient could pay by bank debit and the statement
+would read `paid` permanently even if the debit came back. That is the same
+mistake as the provider console before D-030: a deferral describes something not
+built, and this was something reachable in production with a known-wrong
+terminal state.
 
-**How it would be built.** Treat ACH success as provisional. The statement moves
+**What exists now.** A succeeded bank debit derives `settling` rather than
+`paid` for five days, the statement says the payment is clearing rather than
+final, and the receipt says the two rails do not settle alike instead of
+pretending they do. `settling` is a new value in `StatementStatus`, which is the
+interface contract, changed deliberately and recorded in D-034.
+
+**What is still missing.** The return event. Nothing consumes a returned-debit
+webhook, so the statement leaves `settling` by the window expiring rather than
+by the bank saying anything. Five days is also a simplification: the NACHA
+window is two banking days for most return reasons and sixty for an unauthorised
+debit, so a real implementation holds per return code rather than per rail.
+
+**How the rest would be built.** Treat ACH success as provisional. The statement moves
 to a `settling` state rather than `paid`, and only reaches `paid` after the
 return window closes. The webhook handler must be able to walk a statement
 backwards out of `paid`, which is why the state machine already compares

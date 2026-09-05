@@ -1085,3 +1085,89 @@ choice rather than a hole.
 It was right, and nobody read it as a live finding until a review pointed at the
 endpoints behind it. That is an argument for the table, and an argument against
 trusting anyone to act on a row that says missing.
+
+---
+
+## D-031: the routing shape was resolved by asking the API, and the descriptor now reaches the field that produces it
+
+Date: 2026-09-05
+
+Two gaps a review found, both places where a document claimed something the
+code did not do.
+
+**The statement descriptor was argued for and never sent.** `DESIGN.md` section
+10 lists `statement_descriptor` under what this application sends. It did not.
+The provider name was prefixed into `description`, which is an internal
+annotation and is not the field that reaches a bank statement. Meanwhile the
+receipt told the patient "charges appear on your statement as NORTHGATE HEALTH",
+which was false.
+
+That matters more here than it would in retail. The descriptor is a
+HIPAA-adjacent argument in `DOMAIN.md` section 5, and `SCOPE.md` item 6 leans on
+it as the cheapest chargeback prevention available: the dispute a patient never
+files because they recognised the line. The one field the documents argue
+hardest about was the one field not populated.
+
+Now sends `statement_descriptor_name`, confirmed against the Hyperswitch source:
+maximum 22 characters for the concatenated descriptor, and `NORTHGATE HEALTH` is
+16. The source marks the field for deprecation in favour of
+`billing_descriptor`, whose struct is defined in another crate and was not
+confirmed, so the documented field that works today is used rather than a guess
+at its successor.
+
+**The orchestration argument had nothing running behind it.** `DOMAIN.md`
+section 7 makes a five-point case for an orchestration layer: processor
+plurality, vault portability, least-cost routing, failover, centralised retry.
+`DESIGN.md` section 11 promised an amount-based routing rule. None of it
+existed, and it was not in `SCOPE.md` either, so it was a promise with neither
+delivery nor deferral.
+
+**The API documentation for routing could not be found, so the shape was
+resolved by asking the API.** The same technique as D-007 and D-028, and it
+worked better than reading would have. Each malformed request named the next
+missing field:
+
+```
+{}                             -> Missing required param: name
+{name}                         -> Missing required param: description
+algorithm: {}                  -> missing field `type`
+algorithm: {type: "nonsense"}  -> unknown variant, expected one of `single`,
+                                  `priority`, `volume_split`, `advanced`,
+                                  `three_ds_decision_rule`
+algorithm: {type: "advanced"}  -> missing field `data`
+data: {}                       -> missing field `defaultSelection`
+rules: [{}]                    -> missing field `name`
+...then `metadata` at the rule, the statement, and the condition
+```
+
+The full shape, which is written down here because it is not written down
+anywhere else that could be found:
+
+```json
+{ "name": "...", "description": "...", "profile_id": "...",
+  "algorithm": { "type": "advanced", "data": {
+    "defaultSelection": { "type": "priority", "data": [{ "connector": "stripe" }] },
+    "rules": [{ "name": "...", "connectorSelection": { ... }, "metadata": {},
+      "statements": [{ "condition": [{ "lhs": "amount",
+        "comparison": "greater_than",
+        "value": { "type": "number", "value": 50000 },
+        "metadata": {} }], "metadata": {} }] }],
+    "metadata": {} } } }
+```
+
+`routing_ejjXIFOEagrouU0O7K0s` is created and activated on the profile:
+balances over $500.00 evaluate on their own branch, which is the threshold
+`SCOPE.md` item 1 uses for payment plan candidacy.
+
+**What one connector can and cannot prove, said plainly.** It cannot demonstrate
+choosing between processors, because there is only one to choose. It does prove
+the rule is real: an amount condition Hyperswitch evaluates on every payment,
+readable at `GET /routing/active`, surfaced on the risk console next to the
+blocklist. The claim moves from "an orchestration layer would let us route" to
+"here is the routing algorithm, and here is what a second connector would add".
+
+**A side effect worth recording.** `{"connector": "stripe"}` was accepted, which
+independently confirms the connector is Stripe rather than the dummy one. That
+is the second time that question has been answered by something working rather
+than by looking: the first was a real refund settling, which the dummy connector
+cannot do.

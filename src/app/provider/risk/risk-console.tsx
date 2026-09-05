@@ -32,6 +32,9 @@ interface RiskPayload {
   readonly lookupFailures: readonly { day: string; count: number }[];
   readonly blocklist: readonly { kind: string; entries: readonly unknown[] }[] | null;
   readonly blocklistError: string | null;
+  readonly routing:
+    | readonly { id: string; name: string; kind: string; description?: string }[]
+    | null;
 }
 
 const KINDS = ["card_bin", "extended_card_bin", "fingerprint"] as const;
@@ -102,7 +105,7 @@ export function RiskConsole() {
     return <p className="hint">Reading the ledger and the blocklist</p>;
   }
 
-  const { risk, lookupFailures, blocklist, blocklistError } = data;
+  const { risk, lookupFailures, blocklist, blocklistError, routing } = data;
   const lookupTotal = lookupFailures.reduce((n, d) => n + d.count, 0);
 
   return (
@@ -231,6 +234,48 @@ export function RiskConsole() {
               <span>{lookupTotal}</span>
             </div>
           </div>
+        </div>
+      </section>
+
+      <section style={{ marginTop: "var(--gap-section)" }}>
+        <p className="eyebrow">Orchestration &middot; live from Hyperswitch</p>
+        <h2 className="section-title" style={{ margin: "0.75rem 0 0.75rem" }}>
+          Active routing
+        </h2>
+        <p className="muted lede" style={{ marginBottom: "1.25rem" }}>
+          One connector is configured, so routing cannot yet demonstrate choosing between
+          processors. What it does demonstrate is that the rule is real: an amount
+          condition evaluated by Hyperswitch on every payment, not a paragraph claiming
+          one could be.
+        </p>
+
+        <div className="panel">
+          {routing === null ? (
+            <p className="note note-warn" style={{ margin: 0 }}>
+              Routing could not be read, so its state is unknown rather than empty.
+            </p>
+          ) : routing.length === 0 ? (
+            <p className="hint" style={{ margin: 0 }}>
+              No routing algorithm is active. Payments fall back to connector priority.
+            </p>
+          ) : (
+            routing.map((r) => (
+              <div key={r.id} style={{ marginBottom: "0.75rem" }}>
+                <div className="ledger-row">
+                  <span>{r.name}</span>
+                  <span className="num">{r.kind}</span>
+                </div>
+                {r.description !== undefined && (
+                  <p className="hint" style={{ margin: "0.25rem 0 0" }}>
+                    {r.description}
+                  </p>
+                )}
+                <p className="hint" style={{ margin: "0.15rem 0 0" }}>
+                  <span className="num">{r.id}</span>
+                </p>
+              </div>
+            ))
+          )}
         </div>
       </section>
 

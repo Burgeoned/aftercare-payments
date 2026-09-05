@@ -249,8 +249,8 @@ The rule from `CLAUDE.md`: no PHI reaches the processor.
 |---|---|---|
 | `description` | `Patient responsibility, statement 4471-A` | Procedure, diagnosis, department |
 | `metadata` | `statement_ref`, opaque | Any clinical identifier, name, DOB, MRN |
-| `statement_descriptor` | A neutral, recognizable provider name | Specialty or service line |
-| `customer_id` | Opaque internal id | Name or email as the identifier |
+| `statement_descriptor_name` | A neutral, recognizable provider name, 22 characters | Specialty or service line |
+| ~~`customer_id`~~ | Not sent. Nothing here vaults a credential, and a customer only exists to hold one. It returns with payment plans, `SCOPE.md` item 1 | Name or email as the identifier |
 
 The statement descriptor deserves its own note in the writeup. It has to be
 recognizable enough to avoid a chargeback and generic enough that a line item on
@@ -263,20 +263,21 @@ the doc explains the tradeoff.
 - **Connector:** Stripe in test mode, configured through the Hyperswitch
   dashboard with our own Stripe test API key. Confirmed: connector test
   credentials vary per connector and are supplied by the merchant.
-- **Second connector if time allows:** a dummy connector, purely to demonstrate a
-  routing rule and failover. The point is the routing configuration, not the
-  second processor.
-- **Routing rule to demonstrate:** amount-based. Balances over a threshold prefer
-  ACH, which is the `DOMAIN.md` section 6 economics argument expressed as
-  configuration rather than prose.
-- **Risk controls:** enable the BIN blocklist and the card-testing guard. A
-  public payment page reachable by statement number is a card-testing target, and
-  saying so in the doc is worth more than the ten minutes it takes to turn on.
+- **Second connector:** not configured. Deferred with reasoning in `SCOPE.md`
+  item 11 rather than left as an aspiration here.
+- **Routing:** an `advanced` algorithm is created and active on the profile.
+  Balances over $500.00 evaluate on their own branch, which is the payment plan
+  threshold from `SCOPE.md` item 1. With one connector configured it cannot
+  demonstrate choosing between processors; it does demonstrate that the rule is
+  real and evaluated by Hyperswitch on every payment. Readable at
+  `GET /routing/active` and shown on the risk console. The request shape is not
+  in any documentation that could be found and was resolved by asking the API,
+  which is recorded in D-031.
 
-**To confirm at implementation time:** the exact server auth header name. The
-API reference describes the secret key without naming the header. Verify against
-the Postman collection or the dashboard before writing the client, rather than
-assuming.
+~~**To confirm at implementation time:** the exact server auth header name.~~
+**Resolved:** `api-key`, with the merchant account inferred from the key. The
+payments path was resolved the same way, empirically rather than chosen, in
+D-007.
 
 ## 12. Data model
 

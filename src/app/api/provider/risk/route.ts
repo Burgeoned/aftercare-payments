@@ -7,6 +7,7 @@ import { STATEMENTS } from "@/lib/domain/fixtures";
 import { summariseRisk } from "@/lib/domain/risk";
 import { allPayments, lookupFailuresByDay } from "@/lib/domain/store";
 import {
+  activeRouting,
   addToBlocklist,
   HyperswitchError,
   listBlocklist,
@@ -75,8 +76,21 @@ export async function GET(): Promise<NextResponse> {
           : "unknown error";
   }
 
+  /**
+   * Read live, like the blocklist. `DOMAIN.md` section 7 argues routing is a
+   * reason to use an orchestration layer, so the argument should point at
+   * something running rather than at a paragraph.
+   */
+  let routing: unknown[] | null = null;
+  try {
+    routing = [...(await activeRouting())];
+  } catch (error) {
+    console.warn("could not read routing configuration", error);
+  }
+
   return NextResponse.json({
     risk: summariseRisk(STATEMENTS, payments),
+    routing,
     lookupFailures: await lookupFailuresByDay(),
     blocklist,
     blocklistError,

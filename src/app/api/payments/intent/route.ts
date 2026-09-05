@@ -219,6 +219,7 @@ export async function POST(request: Request): Promise<NextResponse> {
       // Opaque by construction. The descriptor names the provider group and
       // nothing about the care. See docs/DESIGN.md section 10.
       description: `${STATEMENT_DESCRIPTOR} statement ${statement.ref}`,
+      statementDescriptor: STATEMENT_DESCRIPTOR,
       statementRef: statement.ref,
       returnUrl: `${env.appUrl}/pay/return`,
     });

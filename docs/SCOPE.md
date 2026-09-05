@@ -192,6 +192,43 @@ separately from the statement, so attributing it costs one field. The audit
 requirement is the real one: a correction that moves money needs to say who
 applied it and on what remittance.
 
+### 11. A second connector, and the routing that would use it
+
+**What it is.** A second processor on the account, so routing can choose between
+them and fail over when one is down.
+
+**Why deferred.** `DESIGN.md` section 11 originally promised this and it is the
+right thing to be honest about, because the orchestration argument in
+`DOMAIN.md` section 7 is the strongest case for using Hyperswitch at all:
+processor plurality, vault portability, least-cost routing on Durbin-regulated
+debit, failover, and centralised retry. Five claims, and one connector
+demonstrates none of them.
+
+Adding a second sandbox connector is a dashboard exercise of a few minutes. What
+it would not produce is evidence: two test connectors both approving every card
+show a routing rule firing, not a routing decision worth making. The decisions
+that matter are least-cost routing, which needs real interchange and real
+processor pricing, and failover, which needs one processor to actually fail.
+Neither exists in a sandbox, and staging them would be a demonstration of the
+demonstration.
+
+**What was built instead.** The routing algorithm itself is real: an `advanced`
+rule, created and activated on the profile, where balances over $500.00 evaluate
+on their own branch. Hyperswitch evaluates the amount condition on every
+payment, and the risk console reads the active configuration live rather than
+asserting it. The claim is therefore "here is the routing algorithm, and here is
+what a second connector would add" rather than "an orchestration layer would let
+us route". See D-031.
+
+**How the rest would be built.** Add the second connector, extend the rule's
+`connectorSelection` to a `volume_split` or a priority list, and put the
+health-account BIN classification into the condition: health account cards route
+to whichever processor has the better authorisation rate on restricted BINs,
+which is a genuinely healthcare-specific routing decision and the one worth
+making. Failover is a connector-level setting rather than a rule, and the
+retry behaviour belongs to the Revenue Recovery module already referenced in
+item 1.
+
 ## The general principle
 
 Everything built exercises something specific about payments in this vertical.

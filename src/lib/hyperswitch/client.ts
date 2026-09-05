@@ -30,6 +30,12 @@ export interface CreatePaymentInput {
   readonly description: string;
   /** Opaque statement reference. Never a clinical identifier. */
   readonly statementRef: string;
+  /**
+   * What the patient sees on their bank statement. Provider group name only:
+   * no department, no service line, no procedure. Max 22 characters. See
+   * docs/DESIGN.md section 10.
+   */
+  readonly statementDescriptor: string;
   readonly returnUrl: string;
 }
 
@@ -130,6 +136,19 @@ export async function createPayment(
       capture_method: "automatic",
       confirm: false,
       description: input.description,
+      /**
+       * The field that actually reaches a bank statement. `description` does
+       * not: it is an internal annotation, and the receipt told the patient
+       * their statement would read NORTHGATE HEALTH while nothing sent it.
+       *
+       * Confirmed against the Hyperswitch source: `statement_descriptor_name`,
+       * max 22 characters for the concatenated descriptor. The source marks it
+       * for deprecation in favour of `billing_descriptor`, whose struct shape
+       * is defined in another crate and was not confirmed, so the documented
+       * field that works today is used rather than a guess at its successor.
+       * See docs/DECISIONS.md D-031.
+       */
+      statement_descriptor_name: input.statementDescriptor,
       return_url: input.returnUrl,
       // Opaque by construction. A clinical identifier here would put PHI in a
       // third-party system. See docs/DESIGN.md section 10.
@@ -256,4 +275,32 @@ export async function removeFromBlocklist(type: BlocklistKind, data: string): Pr
     method: "DELETE",
     body: JSON.stringify({ type, data }),
   });
+}
+
+// ---------------------------------------------------------------------------
+// Routing
+// ---------------------------------------------------------------------------
+
+export interface RoutingAlgorithm {
+  readonly id: string;
+  readonly name: string;
+  readonly kind: string;
+  readonly description?: string;
+  readonly profile_id?: string;
+  readonly created_at?: number;
+}
+
+/**
+ * The routing algorithms active on this profile.
+ *
+ * Read rather than assumed, for the same reason the blocklist is: a claim about
+ * orchestration that nobody checked is decoration. `DOMAIN.md` section 7 argues
+ * that routing is a reason to use an orchestration layer at all, so the
+ * argument should be able to point at something running.
+ */
+export async function activeRouting(): Promise<RoutingAlgorithm[]> {
+  const result = await call<RoutingAlgorithm[] | { data?: RoutingAlgorithm[] }>("/routing/active", {
+    method: "GET",
+  });
+  return Array.isArray(result) ? result : (result.data ?? []);
 }

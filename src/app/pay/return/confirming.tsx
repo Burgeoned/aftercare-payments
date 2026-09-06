@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 import { guidanceFor, isDeclineCategory, type DeclineCategory } from "@/lib/domain/decline";
 
@@ -33,6 +33,48 @@ interface StatusResponse {
   /** Null when the redirect named no payment. */
   readonly thisPaymentSettled: boolean | null;
 }
+
+/**
+ * What the page says at the top, for each phase.
+ *
+ * The heading used to be fixed in the server page: "You are back. Now we wait
+ * for the ledger." That is right while waiting and wrong the moment the ledger
+ * answers, so a declined payment showed a page still announcing a wait above a
+ * panel that had already said the card was refused. The heading is the largest
+ * text on the screen and it was the least accurate.
+ *
+ * The phase lives here, so the heading does too.
+ */
+const HEADINGS: Record<Phase, { eyebrow: string; lead: string; tail: string }> = {
+  waiting: {
+    eyebrow: "Confirming",
+    lead: "You are back.",
+    tail: "Now we wait for the ledger.",
+  },
+  settled: {
+    eyebrow: "Confirmed",
+    lead: "That went through.",
+    tail: "Taking you to your receipt.",
+  },
+  declined: {
+    eyebrow: "Declined",
+    lead: "That did not go through.",
+    tail: "Nothing has been charged.",
+  },
+  timed_out: {
+    // Deliberately not "failed". The processor has not said no, it has not
+    // said anything, and telling a patient their payment failed when it may
+    // yet settle is how one bill gets paid twice.
+    eyebrow: "Still confirming",
+    lead: "Still with your bank.",
+    tail: "There is nothing more to do here.",
+  },
+  no_access: {
+    eyebrow: "Session expired",
+    lead: "Your session expired.",
+    tail: "The payment is not affected.",
+  },
+};
 
 export function Confirming({
   redirectStatus,
@@ -150,14 +192,29 @@ export function Confirming({
     };
   }, [router, paymentId]);
 
+  const { eyebrow, lead, tail } = HEADINGS[phase];
+
+  function frame(children: ReactNode) {
+    return (
+      <>
+        <p className="eyebrow">{eyebrow}</p>
+        <h1 className="hero-title mixed" style={{ margin: "1rem 0 2rem" }} aria-live="polite">
+          {lead}
+          <em>{tail}</em>
+        </h1>
+        <div className="panel">{children}</div>
+      </>
+    );
+  }
+
   if (phase === "settled") {
-    return <p className="muted">Confirmed. Taking you to your receipt.</p>;
+    return frame(<p className="muted">Confirmed. Taking you to your receipt.</p>);
   }
 
   if (phase === "declined" && decline !== null) {
     const { headline, guidance } = guidanceFor(decline.category);
 
-    return (
+    return frame(
       <>
         <p className="note note-warn" style={{ margin: 0 }}>
           <span style={{ fontWeight: 600 }}>{headline}</span>
@@ -169,36 +226,36 @@ export function Confirming({
             Try another method
           </Link>
         </div>
-      </>
+      </>,
     );
   }
 
   if (phase === "no_access") {
-    return (
-      <p className="note">
+    return frame(
+      <p className="note" style={{ margin: 0 }}>
         Your session has expired, which does not affect the payment. Look your statement
         up again to see its current balance.
-      </p>
+      </p>,
     );
   }
 
   if (phase === "timed_out") {
-    return (
-      <p className="note">
+    return frame(
+      <p className="note" style={{ margin: 0 }}>
         Your payment is still confirming with the bank. We asked the processor directly
         and it has not finished either, so this is a wait rather than a failure. The
         balance updates as soon as it settles, and the receipt appears on your statement
         then. It is safe to close this page, and you should not pay again.
-      </p>
+      </p>,
     );
   }
 
-  return (
-    <p className="muted" aria-live="polite">
+  return frame(
+    <p className="muted" aria-live="polite" style={{ margin: 0 }}>
       {redirectStatus === "failed"
         ? "Checking what the processor recorded."
         : "Waiting for the processor to confirm."}
       <span className="hint"> {Math.round(elapsed / 1000)}s</span>
-    </p>
+    </p>,
   );
 }

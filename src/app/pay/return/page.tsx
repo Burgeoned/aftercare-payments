@@ -27,16 +27,12 @@ export default async function ReturnPage({ searchParams }: ReturnPageProps) {
   return (
     <main className="instrument" style={{ minHeight: "100vh" }}>
       <div className="wrap wrap-narrow" style={{ paddingTop: "4.5rem", paddingBottom: "4rem" }}>
-        <p className="eyebrow">Confirming</p>
-
-        <h1 className="hero-title mixed" style={{ margin: "1rem 0 2rem" }}>
-          You are back.
-          <em>Now we wait for the ledger.</em>
-        </h1>
-
-        <div className="panel">
-          <Confirming redirectStatus={status} paymentId={paymentId} />
-        </div>
+        {/*
+          The heading belongs to the component that knows the answer. It used to
+          live here, fixed at "now we wait for the ledger", which kept announcing
+          a wait above a panel that had already reported a decline.
+        */}
+        <Confirming redirectStatus={status} paymentId={paymentId} />
 
         <div className="panel" style={{ marginTop: "1.25rem" }}>
           <div className="ledger">

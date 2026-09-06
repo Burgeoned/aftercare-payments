@@ -81,6 +81,11 @@ Deferred flows and the reasoning behind each are in
 
 ## Documentation
 
+[`ARCHITECTURE.md`](ARCHITECTURE.md) is the written submission: the industry
+constraint, the flows it forces, the integration choices, and what was built
+against what was deferred. Start there. Everything below is the working record
+underneath it.
+
 Eight documents is more than anyone reads. Here is the path.
 
 **If you have ten minutes.** [`docs/DOMAIN.md`](docs/DOMAIN.md) section 2, which

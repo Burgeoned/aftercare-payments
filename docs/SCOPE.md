@@ -272,6 +272,28 @@ configuration change and not an integration.
 not demonstrated. That is the honest position. Showing a wallet button that
 cannot complete a payment would demonstrate less than saying it is not enabled.
 
+### 13. A demo that does not need resetting
+
+**What it is.** The fixture reset in the billing console is a workaround, not a
+feature. It exists because the ledger is append-only and the fixtures are
+shared, so every visitor who pays a statement spends it for the next one.
+
+**Why this shape.** The honest fix is per-visitor isolation: scope the ledger to
+a session so two people looking at the demo never see each other's payments.
+That is the right answer and it was not built, because scoping the ledger keys
+by session touches every read path in the application to solve a problem that
+only exists because this is a demo. The reset solves the same problem in one
+endpoint.
+
+**What it costs.** A control that deletes a payment ledger, which is the
+opposite of what a ledger is for, and which a production system must not have.
+It is staff-gated, it cannot be pointed at non-fixture data, and `DECISIONS.md`
+D-038 says why it is still the least defensible thing here.
+
+**What a real system does instead.** Nothing, because a real system does not
+have this problem. Statements belong to patients, ledgers are per-tenant, and
+there is no shared demo surface to exhaust.
+
 ## The general principle
 
 Everything built exercises something specific about payments in this vertical.

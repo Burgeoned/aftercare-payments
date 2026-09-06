@@ -76,6 +76,15 @@ export interface HyperswitchPayment {
   readonly error_message?: string | null;
   readonly unified_code?: string | null;
   readonly unified_message?: string | null;
+  /** How it was paid. Confirmed present on a live retrieval of a settled card payment. */
+  readonly payment_method?: string | null;
+  readonly payment_method_data?: {
+    readonly card?: {
+      readonly last4?: string | null;
+      readonly card_isin?: string | null;
+      readonly card_network?: string | null;
+    } | null;
+  } | null;
 }
 
 export class HyperswitchError extends Error {
@@ -184,6 +193,24 @@ export interface HyperswitchRefund {
   readonly payment_id: string;
   readonly status: string;
   readonly amount: number;
+  /**
+   * Confirmed present on a live retrieval alongside `currency`, `reason`,
+   * `connector` and `connector_refund_id`. The two timestamps matter because a
+   * rebuilt ledger row is ordered against webhook rows by `updatedAt`, and
+   * ordering has to compare two readings of the processor's clock rather than
+   * one of theirs against one of ours. That mistake is D-018.
+   */
+  readonly created_at?: string;
+  readonly updated_at?: string;
+}
+
+/**
+ * Retrieves a refund. Used by the fixture reset to rebuild a refunded statement
+ * from the processor's record rather than from a constant in this repository.
+ * The path shape was confirmed against the live account, not assumed.
+ */
+export async function getRefund(refundId: string): Promise<HyperswitchRefund> {
+  return call<HyperswitchRefund>(`${REFUNDS_PATH}/${refundId}`, { method: "GET" });
 }
 
 /**

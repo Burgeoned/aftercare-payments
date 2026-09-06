@@ -1520,3 +1520,72 @@ flow.
 **Two real messages are pinned in tests.** They are the only signal, and a
 change to `categorise` that stops matching them is a regression nobody would
 notice until a patient was told to retry a card that cannot work.
+
+## D-038: a demo that degrades with every visitor
+
+The ledger is append-only and the fixtures are shared, so the demo is a one-way
+resource. The first person to pay a statement spends it for everyone who looks
+afterwards. Testing the blocklist three times left three declines in
+`AFT-3994-1177`'s history. A reviewer opening the site late enough would find
+three settled statements and no payment flow at all, which is the one thing the
+submission exists to show.
+
+**This is the least defensible thing in the repository and it is worth saying so
+plainly.** Deleting a payment ledger is the opposite of what a ledger is for.
+Every derived balance in this application is trustworthy because the log only
+grows, and this deletes it. The justification is narrow: these are fixture
+statements against a sandbox account, no real money is described, and the
+alternative is a demo that stops demonstrating. It would not exist in
+production, and `SCOPE.md` item 13 says what a real system does instead.
+
+**The interesting decision was what "reset" restores to.** Blanking all three
+statements is simplest and loses the refund story, because `AFT-4021-8837`'s
+paid-and-partially-refunded state is not fixture data. It is the residue of a
+real $32.70 payment and a real $12.70 refund, and the README advertises it as
+the thing to look at.
+
+Writing that state back as a constant was the obvious alternative and is wrong
+in a specific way. It puts a `succeeded` payment in the ledger that no verified
+webhook produced, which is exactly what hard rules 3 and 4 exist to prevent. The
+row would be indistinguishable from a real one and would be a lie in the format
+of the truth.
+
+**So the reset asks the processor.** It retrieves `pay_hz3mLO8GL41QrB5AgEN1` and
+`ref_gmey0mFKKTTx5cRWbhBa` and builds the rows from the responses. The two ids
+are the only remembered state, and they are references rather than facts: the
+amount, the status, the tender, and both timestamps are read from Hyperswitch.
+The restored ledger is the processor's answer, arrived at through the same
+retrieval the reconciliation path in D-033 already uses.
+
+That gives a property worth having. If the sandbox account is replaced, the ids
+stop resolving and the reset reports a partial result rather than inventing a
+statement that was never paid. `rebuildIsSound` refuses the rebuild unless the
+processor still says the payment succeeded, the refund succeeded, the refund
+belongs to that payment, and the refund is partial.
+
+**`GET /refunds/{id}` was confirmed against the live account** before being
+written, not assumed from the path shape of `GET /payments/{id}`. It returns
+`created_at` and `updated_at`, which the rebuilt row carries so a later webhook
+for the same refund is ordered against the processor's clock rather than ours.
+That is D-018 and it would have been easy to reintroduce here.
+
+**What the reset does not touch.** Nothing at the processor: the real payments
+and the real refund stay where they are, which is what makes the rebuild
+possible. Webhook idempotency claims are kept, because clearing them would let a
+redelivered webhook for a payment just forgotten replay into the fresh ledger.
+Lookup-failure counters are kept because they are risk signal rather than
+billing state, and resetting a bill should not erase the record of someone
+probing the lookup form.
+
+**It cannot be pointed at anything else.** `clearFixtureLedger` takes no
+arguments. Every key it removes is derived from the `STATEMENTS` constant or
+read out of a list reached from one, and the orphaned-index sweep deletes a key
+only when its value names a fixture statement. A staff-authenticated endpoint
+that deletes whatever it is handed is a worse thing to have built than the
+problem it solves.
+
+**Orphaned indexes turned out to matter.** An index maps a processor payment id
+to a statement, and it is what lets a webhook find its statement. Twenty-eight
+keys were in Redis against twelve ledger rows, so indexes were outliving the
+lists that produced them. Leaving them is a route by which forgotten payments
+reappear in a ledger that was just emptied.

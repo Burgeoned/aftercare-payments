@@ -237,3 +237,74 @@ export async function allPayments(): Promise<readonly Payment[]> {
   const lists = await Promise.all(STATEMENTS.map((s) => paymentsForStatement(s.id)));
   return lists.flat();
 }
+
+// ---------------------------------------------------------------------------
+// Fixture reset
+// ---------------------------------------------------------------------------
+
+export interface ClearedLedger {
+  readonly statements: number;
+  readonly payments: number;
+  readonly refunds: number;
+  readonly indexes: number;
+  readonly readjudications: number;
+}
+
+/**
+ * Empties the payment ledger for the fixture statements.
+ *
+ * Every key removed here is derived from `STATEMENTS`, which is a constant in
+ * this repository, or read out of a list that was itself reached from one. The
+ * function takes no arguments for that reason: there is no way to point it at
+ * data it was not built to delete, which matters because the alternative is a
+ * staff-authenticated endpoint that deletes whatever it is handed.
+ *
+ * Webhook idempotency claims are deliberately left in place. Clearing them
+ * would let a redelivered webhook for a payment this just forgot replay into
+ * the fresh ledger, which is a worse outcome than a few stale claims that
+ * expire on their own. Lookup-failure counters are left for the same reason in
+ * reverse: they are risk signal, not billing state, and resetting a bill should
+ * not erase the record of someone probing the lookup form.
+ */
+export async function clearFixtureLedger(): Promise<ClearedLedger> {
+  const cleared = { statements: 0, payments: 0, refunds: 0, indexes: 0, readjudications: 0 };
+
+  for (const statement of STATEMENTS) {
+    const rows = await paymentsForStatement(statement.id);
+    if (rows.length > 0) cleared.statements += 1;
+
+    for (const row of rows) {
+      const removed = await redis().del(refundsKey(row.id));
+      cleared.refunds += removed;
+      cleared.indexes += await redis().del(indexKey(row.hyperswitchPaymentId));
+    }
+
+    cleared.payments += rows.length;
+    await redis().del(paymentsKey(statement.id));
+    cleared.readjudications += await redis().del(readjudicationKey(statement.id));
+  }
+
+  /**
+   * Indexes outlive the lists that produced them. An intent creates a row and
+   * an index; a later reset removes both, but earlier resets and abandoned
+   * deploys leave index keys pointing at statements whose lists are already
+   * gone. They are not harmless: an index is what lets a webhook find a
+   * statement, so a stale one is a route by which forgotten payments reappear
+   * in a ledger that was just emptied.
+   *
+   * Scanned rather than enumerated because there is no list to walk, and
+   * deleted only when the value names a fixture statement, so the sweep cannot
+   * reach anything else.
+   */
+  const fixtureIds = new Set(STATEMENTS.map((s) => s.id));
+  const orphans = await redis().keys("aftercare:payment-index:*");
+
+  for (const key of orphans) {
+    const target = await redis().get<string>(key);
+    if (target !== null && fixtureIds.has(target)) {
+      cleared.indexes += await redis().del(key);
+    }
+  }
+
+  return cleared;
+}

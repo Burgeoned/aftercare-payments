@@ -53,6 +53,13 @@ Both are behind a staff password, because they move money out of the provider an
 control the fraud guard. It was open until a review pointed at it, which is
 D-030. The password is supplied with the submission rather than printed here.
 
+The billing office view also has a fixture reset, because the ledger only grows
+and the statements are shared: paying one spends it for whoever looks next. It
+clears the ledger and rebuilds the refunded statement by retrieving the real
+payment and refund from Hyperswitch, rather than writing a remembered state back
+into a log that is supposed to come from verified webhooks. It is the least
+defensible thing in the repository and D-038 says so at length.
+
 ## What is built
 
 | Flow | Notes |

@@ -6,6 +6,7 @@ import Link from "next/link";
 
 import { PROVIDER_NAME, STATEMENTS } from "@/lib/domain/fixtures";
 import { ReadjudicateForm } from "./readjudicate-form";
+import { ResetForm } from "./reset-form";
 
 /**
  * The provider console, reduced to the one action this prototype needs.
@@ -64,6 +65,8 @@ export default async function ProviderPage() {
             a health account is a reversal against a tax-advantaged account.
           </p>
         </div>
+
+        <ResetForm />
 
         <p style={{ marginTop: "2rem", display: "flex", gap: "1.5rem" }}>
           <Link href="/provider/risk" style={{ fontSize: "var(--fs-small)" }}>

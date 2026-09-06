@@ -248,6 +248,30 @@ making. Failover is a connector-level setting rather than a rule, and the
 retry behaviour belongs to the Revenue Recovery module already referenced in
 item 1.
 
+### 12. Apple Pay and Google Pay
+
+**What it is.** Wallet buttons in the checkout. `DOMAIN.md` section 9 lists them
+as required rather than optional, because most patients open a statement on a
+phone and manual card entry is where a high-friction page loses people.
+
+**Why deferred.** Not a code decision. The Unified Checkout renders whatever the
+connector has enabled, and on the deployed domain it renders card and bank debit,
+because no wallet is enabled to render. Turning them on is account work outside
+this repository: Apple Pay needs a domain association file served from the
+merchant's own domain and that domain registered with Apple, Google Pay needs a
+merchant id from the Google Pay console, and each then has to be enabled on the
+connector. A sandbox connector on a `vercel.app` subdomain is the wrong place to
+do any of it.
+
+**What it would take.** Serve the association file, register the domain, enable
+both methods on the connector. The checkout component does not change, which is
+the argument for Unified Checkout made in `DESIGN.md` section 4: a wallet is a
+configuration change and not an integration.
+
+**What is lost by deferring it.** The mobile conversion argument is stated and
+not demonstrated. That is the honest position. Showing a wallet button that
+cannot complete a payment would demonstrate less than saying it is not enabled.
+
 ## The general principle
 
 Everything built exercises something specific about payments in this vertical.

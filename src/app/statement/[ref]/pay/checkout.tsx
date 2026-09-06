@@ -35,17 +35,21 @@ interface IntentResponse {
   readonly currency: string;
 }
 
-function PayButton({ returnUrl }: { returnUrl: string }) {
+function PayButton({
+  returnUrl,
+  onFailure,
+}: {
+  returnUrl: string;
+  onFailure: (message: string) => void;
+}) {
   const hyper = useHyper();
   const widgets = useWidgets();
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   async function onPay() {
     if (hyper === null || widgets === null) return;
 
     setSubmitting(true);
-    setError(null);
 
     const result = await hyper.confirmPayment({
       elements: widgets,
@@ -58,7 +62,7 @@ function PayButton({ returnUrl }: { returnUrl: string }) {
     // Reached only when the redirect did not happen, which means confirmation
     // failed before the processor took over.
     setSubmitting(false);
-    setError(result.error?.message ?? "Payment could not be confirmed.");
+    onFailure(result.error?.message ?? "Payment could not be confirmed.");
   }
 
   return (
@@ -70,11 +74,6 @@ function PayButton({ returnUrl }: { returnUrl: string }) {
       >
         {submitting ? "Confirming" : "Pay now"}
       </button>
-      {error !== null && (
-        <p role="alert" className="note note-warn" style={{ marginTop: "1rem" }}>
-          {error}
-        </p>
-      )}
     </div>
   );
 }
@@ -88,6 +87,31 @@ export function Checkout({
 }) {
   const [intent, setIntent] = useState<IntentResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [declined, setDeclined] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
+
+  /**
+   * A failed confirmation spends the intent.
+   *
+   * Hyperswitch moves a payment to `failed` when confirmation is refused, and a
+   * failed payment cannot be confirmed again without `manual_retry` on the
+   * profile. The checkout used to fetch its intent once, so after a decline the
+   * SDK still held the dead client secret and pressing Pay again asked the
+   * processor to confirm a payment it had already closed. The patient got
+   * "you cannot confirm this payment because it has status failed", which is
+   * true, addressed to the wrong audience, and unactionable.
+   *
+   * Rather than guess client-side which failures are terminal, this asks the
+   * intent route again. That route already retrieves the live payment and
+   * decides: still confirmable, and it hands back the same secret, so a
+   * mistyped card keeps what was typed; closed, and it creates a fresh one.
+   * The status question is answered once, on the server, by the code that
+   * already owns it.
+   */
+  function onConfirmFailure(message: string): void {
+    setDeclined(message);
+    setAttempt((n) => n + 1);
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -112,7 +136,16 @@ export function Checkout({
           return;
         }
 
-        setIntent(body as IntentResponse);
+        /**
+         * Identity is preserved when the secret has not changed, so a reusable
+         * intent does not remount the card form and discard what the patient
+         * typed. A new secret is a new object, and the keyed remount below
+         * gives the SDK a clean element to bind to.
+         */
+        const next = body as IntentResponse;
+        setIntent((prev) =>
+          prev !== null && prev.clientSecret === next.clientSecret ? prev : next,
+        );
       } catch (cause) {
         if (!cancelled) {
           setError(cause instanceof Error ? cause.message : "Network error");
@@ -123,7 +156,7 @@ export function Checkout({
     return () => {
       cancelled = true;
     };
-  }, [portion]);
+  }, [portion, attempt]);
 
   if (error !== null) {
     return (
@@ -140,10 +173,30 @@ export function Checkout({
 
   return (
     <>
-      <HyperElements hyper={hyperPromise} options={{ clientSecret: intent.clientSecret }}>
+      <HyperElements
+        // Keyed on the secret so a replacement intent gets a clean mount rather
+        // than a form still bound to a payment the processor has closed.
+        key={intent.clientSecret}
+        hyper={hyperPromise}
+        options={{ clientSecret: intent.clientSecret }}
+      >
         <UnifiedCheckout id="unified-checkout" />
-        <PayButton returnUrl={returnUrl} />
+        <PayButton returnUrl={returnUrl} onFailure={onConfirmFailure} />
       </HyperElements>
+
+      {/*
+        Lives here rather than inside HyperElements on purpose. A replacement
+        intent remounts that subtree, and an explanation that disappears at the
+        moment the patient is given a fresh form to fill is worse than none.
+      */}
+      {declined !== null && (
+        <p role="alert" className="note note-warn" style={{ marginTop: "1.25rem" }}>
+          <strong>That payment was not accepted.</strong> {declined} A new payment has
+          been prepared, so you can try again with a different card. Nothing has been
+          charged.
+        </p>
+      )}
+
       <p className="hint" style={{ marginTop: "1.5rem" }}>
         {/*
           The amount the server actually created the intent for, not the one the

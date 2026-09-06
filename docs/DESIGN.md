@@ -350,9 +350,16 @@ See `DECISIONS.md` D-012.
 2. Whether ACH through the Stripe test connector supports a returned-payment
    simulation in sandbox. If not, ACH returns get described rather than
    demonstrated.
-3. Whether Apple Pay renders in the sandbox SDK without domain verification. If
-   it needs a verified domain, the wallet buttons are described rather than
-   demonstrated.
+3. ~~Whether Apple Pay renders in the sandbox SDK without domain verification.~~
+   Resolved by looking: on the deployed HTTPS domain the Unified Checkout offers
+   card and bank debit only. No wallet button appears, because a wallet is not a
+   property of the SDK. Apple Pay needs a domain association file served from
+   the merchant's own domain and registered with Apple, Google Pay needs a
+   merchant id from the Google Pay console, and both then need enabling on the
+   connector. None of that is sandbox work, and the part of it that is real is
+   an account setup exercise rather than an integration one. The wallet buttons
+   are described rather than demonstrated, and `SCOPE.md` item 12 says what
+   turning them on involves.
 
 Each of these resolves to either a built flow or a documented deferral. Neither
 outcome is a problem as long as the doc is honest about which one happened.

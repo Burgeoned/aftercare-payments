@@ -1401,3 +1401,59 @@ subagent reviews. A patient clicking a button did.
 guard was correct, so no payment could be taken against a settled statement. Had
 the header been right and the route lax, the same divergence collects money the
 provider would have to refund.
+
+## D-036: a declined payment could not be retried
+
+Found by testing the blocklist, which is the control that makes this easy to
+hit: a blocked BIN is refused immediately, with no redirect and no 3DS, so the
+patient stays on the checkout with a dead intent in front of them.
+
+Pressing **Pay now** a second time produced:
+
+> You cannot confirm this payment because it has status failed, you can enable
+> `manual_retry` in profile to try this payment again
+
+**What was happening.** Hyperswitch moves a payment to `failed` when
+confirmation is refused, and a failed payment cannot be confirmed again unless
+`manual_retry` is enabled on the profile. `Checkout` fetched its intent once, in
+a `useEffect` keyed only on the chosen portion, so after a decline the SDK still
+held the client secret of the payment the processor had just closed. Every
+retry asked to confirm the same dead intent.
+
+**The server was already right.** `failed` is not in the intent route's
+`REUSABLE` set, so a fresh request would have created a new payment. The client
+simply never made one. The bug was entirely in who was allowed to ask.
+
+**Enabling `manual_retry` would have been the wrong fix**, and it is worth
+saying why, because the error message suggests it. That setting lets a failed
+intent be confirmed again, which keeps one payment id across attempts that were
+refused for different reasons. A blocklist rejection and a real issuer decline
+would share a row. The ledger is append-only and read by folding on the
+processor's payment id, so collapsing distinct attempts into one id makes the
+fold less able to say what happened, in exchange for a retry the client can get
+by asking again. A new intent per attempt is the more truthful record.
+
+**The fix, and why it does not classify errors client-side.** A failed
+confirmation now calls back up to `Checkout`, which re-requests the intent. The
+route retrieves the live payment and decides: still confirmable, and it returns
+the same secret, so a mistyped card number keeps everything else the patient
+typed; closed, and it creates a fresh one. The client never asks what a failure
+meant, because the answer is a payment status and the server already owns that
+question. Guessing it from an SDK error string would have been a second reader
+of the same state, which is D-035 and the four before it.
+
+**`HyperElements` is keyed on the client secret.** A replacement intent has to
+remount the card form, or the SDK stays bound to a payment that no longer
+accepts confirmation.
+
+**The decline message moved out of that subtree.** It used to be local state
+inside `PayButton`, which the remount destroys. An explanation that vanishes at
+the exact moment the patient is handed a fresh form is worse than no explanation.
+It now sits in `Checkout`, above the remount boundary, and says what happened,
+that a new payment is ready, and that nothing was charged.
+
+**What this does not cover.** The inline message is the SDK's text, not the
+normalized decline copy in `decline.ts`. That path runs off a webhook
+`failureReason` on page load and still does. Two sources of decline language is
+one more than there should be, and unifying them means the confirm response
+resolving to the same normalized category, which is worth doing and is not done.

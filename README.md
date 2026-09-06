@@ -35,8 +35,14 @@ No account. Enter a statement reference and the matching date of birth.
 
 Sandbox test cards. `4242 4242 4242 4242` is an ordinary Visa.
 `5555 5555 5555 4444` is recognised as a health account card, which is what
-makes the split tender path appear on `AFT-4108-2290`. Any future expiry, any
-CVC.
+makes the split tender path appear on `AFT-4108-2290`. `4111 1111 1111 1111` is
+on the live blocklist and is refused before it reaches the connector. Any future
+expiry, any CVC.
+
+Card and bank debit are the methods offered. No wallet button appears, because
+enabling Apple Pay or Google Pay is domain registration and connector
+configuration rather than integration work. `docs/SCOPE.md` item 12 says what it
+involves.
 
 The billing office view is at [`/provider`](https://aftercare-payments.vercel.app/provider),
 where a simulated payer correction issues a real partial refund, and

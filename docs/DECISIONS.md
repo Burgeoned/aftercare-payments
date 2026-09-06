@@ -1588,4 +1588,17 @@ problem it solves.
 to a statement, and it is what lets a webhook find its statement. Twenty-eight
 keys were in Redis against twelve ledger rows, so indexes were outliving the
 lists that produced them. Leaving them is a route by which forgotten payments
-reappear in a ledger that was just emptied.
+reappear in a ledger that was just emptied. The first real run took the store
+from thirty keys to eight.
+
+**One clock was still ours, and it showed.** The first run produced a receipt
+reading "your insurer reprocessed this claim on September 6" above a refund
+issued on September 5. Every other field came from the processor, but the
+correction was stamped with the reset's own clock, which placed it after the
+refund it justifies. Money returned before the reason for it existed.
+
+The fix is to date the correction from the refund's `created_at`. In the live
+console `recordReadjudication` runs immediately before `createRefund`, so the
+refund's creation time is what the correction's timestamp approximates anyway.
+It also means nothing in a rebuilt statement is dated by us, which is the
+property this design was reaching for and had not quite reached.

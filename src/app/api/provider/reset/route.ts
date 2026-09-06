@@ -80,12 +80,20 @@ export async function POST(): Promise<NextResponse> {
        * The correction is what makes the refund correct rather than arbitrary.
        * Restoring the refund without it would leave a statement that was
        * refunded for no stated reason and still owing the difference.
+       *
+       * Dated from the refund, not from now. Stamping it with the reset's own
+       * clock put the correction after the refund it justifies, so the receipt
+       * read "your insurer reprocessed this claim on September 6" above a
+       * refund issued on September 5: money returned before the reason for it
+       * existed. In the live console the correction is recorded immediately
+       * before the refund is issued, so the refund's own creation time is both
+       * accurate and the only clock in this rebuild that is not ours.
        */
       await recordReadjudication({
         statementId: target.statementId,
         revisedPatientResponsibility: cents(target.readjudication.revisedPatientResponsibility),
         reason: target.readjudication.reason,
-        at: new Date().toISOString(),
+        at: refund.created_at ?? live.updated ?? new Date().toISOString(),
       });
 
       rebuilt.push(target.statementId);

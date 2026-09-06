@@ -29,6 +29,7 @@ const CATEGORIES: ReadonlySet<string> = new Set([
   "expired_card",
   "incorrect_details",
   "card_blocked",
+  "card_not_accepted",
   "processing_error",
   "unknown",
 ]);
@@ -40,6 +41,7 @@ export type DeclineCategory =
   | "expired_card"
   | "incorrect_details"
   | "card_blocked"
+  | "card_not_accepted"
   | "processing_error"
   | "unknown";
 
@@ -69,6 +71,19 @@ function categorise(haystack: string): DeclineCategory {
     return "incorrect_details";
   if (has("lost_card", "stolen_card", "pickup_card", "restricted_card", "blocked"))
     return "card_blocked";
+  /**
+   * The wording a refused card actually produces, read off three real failed
+   * payments in the sandbox rather than guessed. The blocklist path returns
+   * "We're unable to accept this card, please try another card or a different
+   * payment method" with `error_code`, `unified_code` and `unified_message` all
+   * null, so the message is the only signal there is.
+   *
+   * It matched nothing and fell through to `unknown`, whose guidance invites
+   * the patient to try the same card again. For a card that was refused before
+   * it reached the connector, that advice cannot ever work.
+   */
+  if (has("unable to accept this card", "not supported", "unsupported"))
+    return "card_not_accepted";
   if (has("processing_error", "try_again", "issuer_unavailable", "processing"))
     return "processing_error";
   if (has("declined", "do_not_honor", "generic_decline", "transaction_not_allowed"))
@@ -175,6 +190,24 @@ export function guidanceFor(category: DeclineCategory): DeclineGuidance {
         guidance:
           "Contact your bank if this is unexpected. In the meantime another card or a " +
           "bank account will work.",
+        retrySameMethod: false,
+      };
+
+    /**
+     * Deliberately vague about who refused the card, and it is worth saying
+     * why. This category is what a merchant-side blocklist rejection lands in,
+     * and naming the blocklist would tell someone testing stolen cards exactly
+     * which control stopped them and what to vary next. It is also not the
+     * patient's bank, so `card_blocked`'s "contact your bank" would be a wrong
+     * instruction rather than a discreet one.
+     */
+    case "card_not_accepted":
+      return {
+        category,
+        headline: "That card cannot be used for this payment",
+        guidance:
+          "Another card or a bank account will work. Nothing has been charged. If no " +
+          "card works, the billing office can take the payment another way.",
         retrySameMethod: false,
       };
 

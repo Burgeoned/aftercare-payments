@@ -1452,8 +1452,71 @@ the exact moment the patient is handed a fresh form is worse than no explanation
 It now sits in `Checkout`, above the remount boundary, and says what happened,
 that a new payment is ready, and that nothing was charged.
 
-**What this does not cover.** The inline message is the SDK's text, not the
-normalized decline copy in `decline.ts`. That path runs off a webhook
-`failureReason` on page load and still does. Two sources of decline language is
-one more than there should be, and unifying them means the confirm response
-resolving to the same normalized category, which is worth doing and is not done.
+**What this did not cover, resolved in D-037.** The inline message was the
+SDK's text rather than the normalized copy in `decline.ts`, which left two
+sources of decline language. That is now one.
+
+## D-037: the SDK's decline message was worse than the processor's, and both were being shown
+
+Retrying a blocked card produced this, which is three sentences and no reason:
+
+> That payment was not accepted. Payment failed. Try again! A new payment has
+> been prepared, so you can try again with a different card. Nothing has been
+> charged.
+
+The middle sentence is the Hyperswitch SDK's. Ours wrapped it, so the patient
+was told to try again twice and told why zero times.
+
+**What the processor actually knew.** Asking the API about the three failed
+payments on the sandbox account returned two distinct messages:
+
+| Field | Value |
+|---|---|
+| `error_message` | "We're unable to accept this card, please try another card or a different payment method" |
+| `error_message` | "Payment declined: Card declined" |
+| `error_code` | null on all three |
+| `issuer_error_code` | null on all three |
+| `unified_code` | null on all three |
+| `unified_message` | null on all three |
+
+Two things follow. The processor's record is more specific than the SDK's
+"Payment failed. Try again!", so the better text was already available and was
+being discarded. And `unified_code` and `unified_message` are confirmed empty on
+real failures, which upgrades the note in `decline.ts` from repeating what the
+docs say to something checked against the account. The message is the only
+signal there is.
+
+**The classifier got the important one wrong.** "We're unable to accept this
+card" matched none of the mapping's needles and fell through to `unknown`, whose
+guidance is "you can try the same method again". That card was refused by the
+blocklist before it reached a connector. It will be refused every time. The one
+decline the risk work exists to produce was the one the patient was told to
+retry.
+
+**A new category rather than reusing `card_blocked`.** `card_blocked` says
+"Your bank blocked this card" and "contact your bank if this is unexpected",
+which is a wrong instruction here: the patient's bank never saw it.
+`card_not_accepted` says the card cannot be used for this payment and offers
+another card or a bank account.
+
+It does not say why, and that is deliberate. This is the category a merchant
+blocklist rejection lands in, and naming the blocklist tells someone testing
+stolen cards which control stopped them and what to vary next. Vagueness is the
+correct behaviour for exactly one audience and costs the honest patient nothing,
+because the action is the same either way. A test asserts the copy never says
+blocklist, blocked, fraud, risk, your bank, or issuer.
+
+**Where the classification happens.** On the server, in the intent route, which
+already retrieves the live payment. The client asks for it only when it is
+retrying, so a first mount does not pay for a lookup with nothing to report. The
+SDK's error string is now discarded rather than displayed.
+
+This also removes the second reader. Decline language had two sources, one off a
+webhook `failureReason` at page load and one off the SDK at confirm time, and
+they disagreed. Both now resolve through `classifyDecline`. That is the same
+lesson as D-035 and D-036, arrived at from the copy rather than the control
+flow.
+
+**Two real messages are pinned in tests.** They are the only signal, and a
+change to `categorise` that stops matching them is a regression nobody would
+notice until a patient was told to retry a card that cannot work.

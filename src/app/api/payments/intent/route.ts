@@ -3,7 +3,9 @@ import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 
 import { ACCESS_COOKIE, resolveAccess } from "@/lib/access";
-import { deriveBalance, healthAccountEligibleAmount } from "@/lib/domain/balance";
+import { deriveBalance, healthAccountEligibleAmount, latestAttempt } from "@/lib/domain/balance";
+import { classifyDecline } from "@/lib/domain/decline";
+import type { DeclineGuidance } from "@/lib/domain/decline";
 import { parsePortion, resolvePayableAmount, wouldOverCollect } from "@/lib/domain/intent";
 import { STATEMENT_DESCRIPTOR } from "@/lib/domain/fixtures";
 import {
@@ -45,6 +47,45 @@ const REUSABLE: ReadonlySet<string> = new Set([
   "requires_payment_method",
   "requires_confirmation",
 ]);
+
+/**
+ * Why the last attempt on this statement failed, in the patient's language.
+ *
+ * Asked only when the client says it is retrying after a failure, so the normal
+ * first mount does not pay for a lookup it has no use for.
+ *
+ * This exists because the checkout had two sources of decline wording. The page
+ * reload path normalized a webhook `failureReason` through `decline.ts`, while
+ * a failure during confirmation showed whatever string the SDK returned. Those
+ * disagreed: the SDK said "Payment failed. Try again!" for a card the processor
+ * described as one it was unable to accept, so the patient was told to retry a
+ * card that could never work. The processor's own record is both more specific
+ * and more accurate than the SDK's, and it is already being fetched.
+ */
+async function previousFailure(
+  statement: Parameters<typeof latestAttempt>[0],
+  existing: readonly Payment[],
+): Promise<DeclineGuidance | null> {
+  const last = latestAttempt(statement, existing);
+  if (last === null) return null;
+
+  try {
+    const live = await getPayment(last.hyperswitchPaymentId);
+    if (live.status !== "failed") return null;
+
+    return classifyDecline({
+      unifiedCode: live.unified_code ?? null,
+      unifiedMessage: live.unified_message ?? null,
+      errorCode: live.error_code ?? null,
+      errorMessage: live.error_message ?? null,
+      tenderClass: last.tender?.class ?? null,
+    });
+  } catch (error) {
+    // Explaining the last failure is not worth failing the next attempt over.
+    console.warn("could not read the previous failure", error);
+    return null;
+  }
+}
 
 const STATUS_FOR: Record<PaymentError["kind"], number> = {
   statement_not_found: 404,
@@ -92,10 +133,13 @@ export async function POST(request: Request): Promise<NextResponse> {
   const statement = findStatementById(statementId);
   if (statement === null) return fail({ kind: "statement_not_found", ref: statementId });
 
-  let body: { portion?: unknown } = {};
+  let body: { portion?: unknown; retryingAfterFailure?: unknown } = {};
   if (request.headers.get("content-type")?.includes("application/json") === true) {
     try {
-      body = (await request.json()) as { portion?: unknown };
+      body = (await request.json()) as {
+        portion?: unknown;
+        retryingAfterFailure?: unknown;
+      };
     } catch {
       return NextResponse.json(
         { error: "malformed_request", message: "Expected a JSON body." },
@@ -171,6 +215,14 @@ export async function POST(request: Request): Promise<NextResponse> {
   }
 
   /**
+   * Read before either response path, so the explanation travels with whichever
+   * intent the patient ends up with. A reused intent and a replacement intent
+   * are equally in need of saying why the last one did not work.
+   */
+  const declined =
+    body.retryingAfterFailure === true ? await previousFailure(statement, existing) : null;
+
+  /**
    * Reuse an intent rather than create a second one.
    *
    * Without this, every mount of the checkout creates a real payment at the
@@ -219,6 +271,7 @@ export async function POST(request: Request): Promise<NextResponse> {
           amount: payable.value,
           currency: statement.currency,
           reused: true,
+          declined,
         });
       }
     } catch (error) {
@@ -302,5 +355,6 @@ export async function POST(request: Request): Promise<NextResponse> {
     clientSecret: created.client_secret,
     amount: payable.value,
     currency: statement.currency,
+    declined,
   });
 }

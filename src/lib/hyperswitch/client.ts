@@ -64,6 +64,18 @@ export interface HyperswitchPayment {
    * refused at confirmation.
    */
   readonly expires_on?: string;
+  /**
+   * Why a payment failed. Read off three real failed payments in the sandbox:
+   * `error_message` carries text, while `error_code`, `issuer_error_code`,
+   * `unified_code` and `unified_message` were all null on every one of them.
+   * The unified fields are the ones worth consuming and are documented upstream
+   * as not live yet, which this confirms rather than assumes. They are read
+   * anyway so that this starts working the day they ship.
+   */
+  readonly error_code?: string | null;
+  readonly error_message?: string | null;
+  readonly unified_code?: string | null;
+  readonly unified_message?: string | null;
 }
 
 export class HyperswitchError extends Error {

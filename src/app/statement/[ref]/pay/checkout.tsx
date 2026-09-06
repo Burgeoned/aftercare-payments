@@ -9,6 +9,7 @@ import {
   useWidgets,
 } from "@juspay-tech/react-hyper-js";
 
+import type { DeclineGuidance } from "@/lib/domain/decline";
 import { publishableKey } from "@/lib/env";
 
 /**
@@ -33,6 +34,8 @@ interface IntentResponse {
   readonly clientSecret: string;
   readonly amount: number;
   readonly currency: string;
+  /** Why the previous attempt failed, normalized server-side. Null on a first mount. */
+  readonly declined: DeclineGuidance | null;
 }
 
 function PayButton({
@@ -40,7 +43,7 @@ function PayButton({
   onFailure,
 }: {
   returnUrl: string;
-  onFailure: (message: string) => void;
+  onFailure: () => void;
 }) {
   const hyper = useHyper();
   const widgets = useWidgets();
@@ -61,8 +64,14 @@ function PayButton({
 
     // Reached only when the redirect did not happen, which means confirmation
     // failed before the processor took over.
+    /**
+     * The SDK's own message is deliberately discarded. It said "Payment failed.
+     * Try again!" for a card the processor described as one it could not
+     * accept, which is both vaguer than the truth and the wrong instruction.
+     * The server reads the processor's record and normalizes it.
+     */
     setSubmitting(false);
-    onFailure(result.error?.message ?? "Payment could not be confirmed.");
+    onFailure();
   }
 
   return (
@@ -87,7 +96,6 @@ export function Checkout({
 }) {
   const [intent, setIntent] = useState<IntentResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [declined, setDeclined] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
 
   /**
@@ -108,8 +116,7 @@ export function Checkout({
    * The status question is answered once, on the server, by the code that
    * already owns it.
    */
-  function onConfirmFailure(message: string): void {
-    setDeclined(message);
+  function onConfirmFailure(): void {
     setAttempt((n) => n + 1);
   }
 
@@ -121,7 +128,9 @@ export function Checkout({
         const res = await fetch("/api/payments/intent", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ portion }),
+          // The server only reads the previous failure when asked, so a first
+          // mount does not pay for a lookup with nothing to report.
+          body: JSON.stringify({ portion, retryingAfterFailure: attempt > 0 }),
         });
         const body: unknown = await res.json();
 
@@ -189,12 +198,11 @@ export function Checkout({
         intent remounts that subtree, and an explanation that disappears at the
         moment the patient is given a fresh form to fill is worse than none.
       */}
-      {declined !== null && (
-        <p role="alert" className="note note-warn" style={{ marginTop: "1.25rem" }}>
-          <strong>That payment was not accepted.</strong> {declined} A new payment has
-          been prepared, so you can try again with a different card. Nothing has been
-          charged.
-        </p>
+      {intent.declined !== null && (
+        <div role="alert" className="note note-warn" style={{ marginTop: "1.25rem" }}>
+          <p style={{ margin: 0, fontWeight: 600 }}>{intent.declined.headline}</p>
+          <p style={{ margin: "0.4rem 0 0" }}>{intent.declined.guidance}</p>
+        </div>
       )}
 
       <p className="hint" style={{ marginTop: "1.5rem" }}>

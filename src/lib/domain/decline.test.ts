@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { classifyDecline, type DeclineInput } from "./decline";
+import type { TenderClass } from "./types";
 
 /**
  * A patient who is declined still owes the money. What this function says next
@@ -97,5 +98,68 @@ describe("classifyDecline", () => {
       expect(text).not.toContain("invalid card");
       expect(text).not.toContain("rejected");
     }
+  });
+});
+
+describe("messages observed on real failed payments", () => {
+  /**
+   * Read off the sandbox account rather than invented. Three failed payments,
+   * two distinct messages, and `error_code`, `issuer_error_code`,
+   * `unified_code` and `unified_message` null on every one of them. The message
+   * is the only signal, which is why these strings are pinned here: a change to
+   * `categorise` that stops matching them is a regression nobody would
+   * otherwise notice until a patient was told to retry a card that cannot work.
+   */
+  const only = (errorMessage: string, tenderClass: TenderClass | null = "standard_card") =>
+    classifyDecline({
+      unifiedCode: null,
+      unifiedMessage: null,
+      errorCode: null,
+      errorMessage,
+      tenderClass,
+    });
+
+  it("classifies a refused card as one that cannot be used, not as unknown", () => {
+    const result = only(
+      "We're unable to accept this card, please try another card or a different payment method",
+    );
+
+    expect(result.category).toBe("card_not_accepted");
+    // The point of the category. "unknown" invites a retry that cannot succeed.
+    expect(result.retrySameMethod).toBe(false);
+  });
+
+  it("classifies a plain decline as a bank decision", () => {
+    expect(only("Payment declined: Card declined").category).toBe("insufficient_funds");
+  });
+
+  it("does not name the control that refused the card", () => {
+    const { headline, guidance } = only("We're unable to accept this card");
+    const copy = `${headline} ${guidance}`.toLowerCase();
+
+    // Naming the control tells someone testing cards what to vary next.
+    for (const word of ["blocklist", "blocked", "block", "fraud", "risk"]) {
+      expect(copy).not.toContain(word);
+    }
+
+    // Offering a bank account as an alternative is fine and is the point. What
+    // must not happen is attributing the refusal to the patient's bank, which
+    // is what `card_blocked` says and is wrong here: it was refused before it
+    // ever reached them.
+    for (const phrase of ["your bank", "contact your bank", "issuer"]) {
+      expect(copy).not.toContain(phrase);
+    }
+  });
+
+  it("still reads unified fields first, for when they ship", () => {
+    const result = classifyDecline({
+      unifiedCode: "UE_9000",
+      unifiedMessage: "expired_card",
+      errorCode: null,
+      errorMessage: "We're unable to accept this card",
+      tenderClass: "standard_card",
+    });
+
+    expect(result.category).toBe("expired_card");
   });
 });

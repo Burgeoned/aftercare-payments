@@ -31,8 +31,5 @@ npm-debug.log*
 yarn-error.log*
 *.log
 
-# exported transcripts are reviewed by hand before committing
-ai-sessions/session-*.md
-
 # Local redaction list for session exports. See scripts/export-session.mjs.
 .redactions

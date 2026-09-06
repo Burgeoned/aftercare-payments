@@ -31,10 +31,10 @@ Retail solutions often rely on hosted payment links. In healthcare, **the bill e
 
 ### Treating HSA/FSA as a BIN Classification Problem
 No major processor exposes HSA or FSA as a standalone payment method because they are ordinary Visa/Mastercard credentials issued against custodial accounts. 
-* **The Choice:** Rather than utilizing a fake connector integration, health account recognition is implemented as a **Bin Identification Number (BIN) classification layer**. The application detects the card type at runtime, adapts the interface to highlight eligible items, and constrains refund routing to satisfy IRS tax regulations (preventing taxable distributions back to personal cards).
+* **The Choice:** Rather than utilizing a fake connector integration, health account recognition is implemented as a **Bank Identification Number (BIN) classification layer**. The application detects the card type at runtime, adapts the interface to highlight eligible items, and constrains refund routing to satisfy IRS tax regulations (preventing taxable distributions back to personal cards).
 
 ### Deliberate Exclusions (BNPL)
-General-purpose Buy-Now-Pay-Later (BNPL) products are intentionally excluded. Applying consumer lending frameworks to medical debt—where patients do not set the price—invites severe regulatory scrutiny. Internal, zero-interest provider payment plans serve this patient need without exposing them to predatory lending terms.
+General-purpose Buy-Now-Pay-Later (BNPL) products are intentionally excluded. Applying consumer lending frameworks to medical debt, where patients do not set the price, invites severe regulatory scrutiny. Internal, zero-interest provider payment plans serve this patient need without exposing them to predatory lending terms.
 
 ---
 
@@ -44,13 +44,19 @@ General-purpose Buy-Now-Pay-Later (BNPL) products are intentionally excluded. Ap
 |---|---|---|
 | **Guest Statement Lookup** | Built | Avoids forced account creation, eliminating a major drop-off vector. Lookup is protected by statement reference and date of birth via a `POST` request (preventing DOB leakage in URLs), issuing a signed httpOnly access cookie. |
 | **Itemized Bill Presentation** | Built | Transparent breakdown of payer adjustments, plan payments, and residual balances per line item. |
-| **Card & Bank Debit Processing** | Built | Standard card paths via Unified Checkout; ACH bank debit configured with a 5-day provisional `settling` state to handle clearing rules safely. |
+| **Card Processing** | Built | Standard card paths via Unified Checkout, with 3DS handled by redirect. |
+| **Bank Debit (ACH)** | Connector configured, untested | Modelled rather than exercised. A succeeded debit derives a provisional `settling` state for a 5-day return window instead of `paid`, and the receipt says so, but no ACH payment has been run end to end and no returned-debit event is consumed. |
 | **Health Account Recognition & Split Tender** | Built | BIN-based classification allowing partial coverage across multiple tenders, with health account refunds drawn down last to safeguard tax rules. |
 | **Verified Webhook Ingestion** | Built | Cryptographically secure (HMAC-SHA512 via `x-webhook-signature-512`) append-only ledger guaranteeing money state independent of browser redirects, with duplicate suppression on `event_id` and out-of-order protection via processor timestamps. |
 | **Readjudication Partial Refunds** | Built | Automated routing back to the original tender (with health account funds drawn down last to protect tax status) driven by provider re-adjudication endpoints. |
+| **Risk Controls & Fraud Guard** | Built | Card-testing signals derived from the payment ledger, presented beside the live Hyperswitch blocklist and the active routing algorithm read from the account rather than mirrored locally. |
+| **Processor Reconciliation** | Built | A webhook that never arrives is repaired by querying the processor directly, since polling a ledger that only a webhook can move cannot resolve a missing webhook. |
 | **Normalized Decline Handling** | Built | Tender-aware error categorization distinguishing insufficient personal funds from health account card limits, presenting contextual next steps. |
 | **Automated Payment Plans & Dunning** | Deferred | Requires complex offline mandates and recovery engines that cannot be meaningfully verified in a stateless sandbox. |
 | **Real IIAS Auto-Substantiation** | Deferred | Requires organizational SIGIS registration and certified inventory integrations rather than pure software logic. |
+| **Second Connector & Live Routing** | Deferred | The strongest case for an orchestration layer is processor plurality, failover, and least-cost routing on regulated debit. One connector demonstrates none of them. A routing algorithm is configured and readable on the account, but with a single processor to choose from it is a shape rather than a decision. |
+| **Rate Limiting on Statement Lookup** | Deferred | A statement reference plus a date of birth is a deliberately weak credential, chosen because it is what a patient holding a paper bill actually has. Failed lookups are counted and surfaced in the risk console; the throttle that would act on them is the missing control. |
+| **Dispute & Chargeback Workflow** | Deferred | Representment requires evidence assembly from the practice management system, which is the integration this prototype explicitly excludes. |
 
 ---
 

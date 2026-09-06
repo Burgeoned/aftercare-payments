@@ -1,0 +1,64 @@
+# Aftercare: Architecture & Technical Design
+
+## 1. The Industry and Why
+
+Standard retail payment assumptions break down completely in healthcare because the price is unknown at the point of service. While a standard credit card authorization holds for roughly seven days, payer adjudication takes anywhere from fifteen to forty-five days. Any architecture attempting to pre-authorize an estimated amount at check-in and capture it post-adjudication fails because the authorization expires long before the payer responds. 
+
+That single timeline mismatch dictates the foundational rule of this architecture: **authorization and collection must be separated entirely.** 
+
+Aftercare abandons extended auth holds in favor of generating statements post-adjudication and executing fresh, customer-initiated transactions against final, verified balances.
+
+---
+
+## 2. Required Flows
+
+Healthcare billing requires specialized flows that standard retail payment gateways do not natively package:
+
+* **Post-Adjudication Balance Payment:** The primary volume driver. The patient receives a statement detailing the billed amount, allowed adjustments, insurance payments, and final residual responsibility.
+* **Split Tender for Finite Health Accounts:** Health savings (HSA) and flexible spending (FSA) accounts are frequently insufficient to cover an entire balance. Patients require a split-tender mechanism to cover an eligible portion via a health card and settle the remainder via a secondary personal tender.
+* **Re-Adjudication Partial Refunds:** Payers frequently re-process claims months later, leading to overpayments. The system must support partial refunds mapped strictly back to original payment methods.
+* **Decline Management:** Because medical bills carry high emotional friction and large ticket sizes, a card decline halts collection permanently if not handled correctly. Normalizing error codes and providing immediate, tender-aware alternatives is critical to prevent drop-off.
+
+---
+
+## 3. Integration Approach & Payment Method Choices
+
+### Unified Checkout vs. Hosted Payment Links
+Retail solutions often rely on hosted payment links. In healthcare, **the bill explanation is the product**. Handing a patient off to a blind redirect strips away the itemized adjudication breakdown (allowed amounts, plan payments, and residual logic), triggering billing office calls and downstream disputes. 
+
+* **The Choice:** **Unified Checkout (Web SDK)** was chosen over hosted links. It grants full UI control over the statement and adjudication display while embedding secure, processor-hosted iframes for card entry.
+* **Compliance Posture:** By utilizing Unified Checkout, the application server never touches raw cardholder data (PAN), maintaining strict **SAQ A PCI compliance** without assuming the heavy burdens of SAQ D.
+
+### Treating HSA/FSA as a BIN Classification Problem
+No major processor exposes HSA or FSA as a standalone payment method because they are ordinary Visa/Mastercard credentials issued against custodial accounts. 
+* **The Choice:** Rather than utilizing a fake connector integration, health account recognition is implemented as a **Bin Identification Number (BIN) classification layer**. The application detects the card type at runtime, adapts the interface to highlight eligible items, and constrains refund routing to satisfy IRS tax regulations (preventing taxable distributions back to personal cards).
+
+### Deliberate Exclusions (BNPL)
+General-purpose Buy-Now-Pay-Later (BNPL) products are intentionally excluded. Applying consumer lending frameworks to medical debt—where patients do not set the price—invites severe regulatory scrutiny. Internal, zero-interest provider payment plans serve this patient need without exposing them to predatory lending terms.
+
+---
+
+## 4. What Was Built vs. Deferred
+
+| Capability | Status | Architectural Approach & Reasoning |
+|---|---|---|
+| **Guest Statement Lookup** | Built | Avoids forced account creation, eliminating a major drop-off vector. Lookup is protected by statement reference and date of birth via a `POST` request (preventing DOB leakage in URLs), issuing a signed httpOnly access cookie. |
+| **Itemized Bill Presentation** | Built | Transparent breakdown of payer adjustments, plan payments, and residual balances per line item. |
+| **Card & Bank Debit Processing** | Built | Standard card paths via Unified Checkout; ACH bank debit configured with a 5-day provisional `settling` state to handle clearing rules safely. |
+| **Health Account Recognition & Split Tender** | Built | BIN-based classification allowing partial coverage across multiple tenders, with health account refunds drawn down last to safeguard tax rules. |
+| **Verified Webhook Ingestion** | Built | Cryptographically secure (HMAC-SHA512 via `x-webhook-signature-512`) append-only ledger guaranteeing money state independent of browser redirects, with duplicate suppression on `event_id` and out-of-order protection via processor timestamps. |
+| **Readjudication Partial Refunds** | Built | Automated routing back to the original tender (with health account funds drawn down last to protect tax status) driven by provider re-adjudication endpoints. |
+| **Normalized Decline Handling** | Built | Tender-aware error categorization distinguishing insufficient personal funds from health account card limits, presenting contextual next steps. |
+| **Automated Payment Plans & Dunning** | Deferred | Requires complex offline mandates and recovery engines that cannot be meaningfully verified in a stateless sandbox. |
+| **Real IIAS Auto-Substantiation** | Deferred | Requires organizational SIGIS registration and certified inventory integrations rather than pure software logic. |
+
+---
+
+## 5. End-to-End Prototype Flow & Invariants
+
+1. **Statement Lookup & Cookie Grant:** The patient submits their statement reference and date of birth via `POST /api/statements/lookup`. The server validates credentials and issues a signed, cryptographically isolated httpOnly cookie (`aftercare_access`) that scopes access exclusively to that single statement.
+2. **Portion Selection & Intent Creation:** The patient selects a payment portion (`"full"` or `"health_account"`). The server calculates the exact amount to prevent client-side floating-point unit injection bugs (e.g., passing raw floats as cents), then creates or reuses a live processor intent via `POST /api/payments/intent`.
+3. **Client-Side SDK Confirmation:** The Hyperswitch Web SDK mounts an isolated iframe for card entry. Confirmation happens directly between the browser and the processor, triggering 3DS redirects if required without exposing PAN data to the application server.
+4. **Webhook Ingestion & Immutable Ledger Append:** Cryptographically verified webhooks (`POST /api/webhooks/hyperswitch`) arrive with HMAC-SHA512 signatures, check idempotency claims against `event_id` to prevent retry loops, and append immutable observation rows to the append-only event log.
+5. **Dynamic State Folding:** Statement statuses and remaining balances are never mutated in place. Instead, they are dynamically derived at read-time by folding processor records by unique IDs (newest `updatedAt` timestamp wins), ensuring complete alignment between the ledger and reality.
+6. **Reconciliation & Return Polling:** The return page polls derived statement statuses with a bounded backoff, supported by a direct processor query reconciliation path (`POST /api/statements/reconcile`) to safely repair missing webhooks without breaking ordering invariants.

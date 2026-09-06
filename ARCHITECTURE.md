@@ -6,7 +6,7 @@ Standard retail payment assumptions break down completely in healthcare because 
 
 That single timeline mismatch dictates the foundational rule of this architecture: **authorization and collection must be separated entirely.** 
 
-Aftercare abandons extended auth holds in favor of generating statements post-adjudication and executing fresh, customer-initiated transactions against final, verified balances.
+Aftercare abandons extended auth holds in favor of generating statements post-adjudication and executing fresh, customer-initiated transactions against final, verified balances. The timeline argument is set out in [`docs/DOMAIN.md`](docs/DOMAIN.md) section 2.
 
 ---
 
@@ -27,11 +27,19 @@ Healthcare billing requires specialized flows that standard retail payment gatew
 Retail solutions often rely on hosted payment links. In healthcare, **the bill explanation is the product**. Handing a patient off to a blind redirect strips away the itemized adjudication breakdown (allowed amounts, plan payments, and residual logic), triggering billing office calls and downstream disputes. 
 
 * **The Choice:** **Unified Checkout (Web SDK)** was chosen over hosted links. It grants full UI control over the statement and adjudication display while embedding secure, processor-hosted iframes for card entry.
-* **Compliance Posture:** By utilizing Unified Checkout, the application server never touches raw cardholder data (PAN), maintaining strict **SAQ A PCI compliance** without assuming the heavy burdens of SAQ D.
+* **Compliance Posture:** By utilizing Unified Checkout, the application server never touches raw cardholder data (PAN), maintaining strict **SAQ A PCI compliance** without assuming the heavy burdens of SAQ D. See [`docs/DESIGN.md`](docs/DESIGN.md) section 3.
 
 ### Treating HSA/FSA as a BIN Classification Problem
 No major processor exposes HSA or FSA as a standalone payment method because they are ordinary Visa/Mastercard credentials issued against custodial accounts. 
 * **The Choice:** Rather than utilizing a fake connector integration, health account recognition is implemented as a **Bank Identification Number (BIN) classification layer**. The application detects the card type at runtime, adapts the interface to highlight eligible items, and constrains refund routing to satisfy IRS tax regulations (preventing taxable distributions back to personal cards).
+
+### Keeping Clinical Data Out of the Payment Rail
+
+PCI is the compliance axis every e-commerce checkout shares. HIPAA is the one that makes this vertical different, and it constrains the architecture harder, because a payment processor is not a business associate for treatment data and a card statement is read by whoever opens the mail.
+
+* **The Choice:** Payments carry an **opaque statement reference** and nothing else. The reference resolves to a patient, a date of service, and line-item detail only inside this application. Nothing clinical reaches the processor in metadata, in the payment description, or in the statement descriptor, which is fixed at `NORTHGATE HEALTH` and names the provider group rather than the care.
+* **Why It Is Structural:** The constraint is enforced at the type boundary rather than by convention. The input type the payment client accepts has no field capable of carrying clinical data, and the patient record itself holds an identifier, a display name, and a date of birth with no diagnosis or procedure anywhere in it. A future call site cannot leak what the types do not carry.
+* **The Cost:** Support and reconciliation lose the ability to answer "what was this charge for" from the processor dashboard alone. That join happens in the application, which is the correct place for it and is a real operational trade rather than a free win.
 
 ### Deliberate Exclusions (BNPL)
 General-purpose Buy-Now-Pay-Later (BNPL) products are intentionally excluded. Applying consumer lending frameworks to medical debt, where patients do not set the price, invites severe regulatory scrutiny. Internal, zero-interest provider payment plans serve this patient need without exposing them to predatory lending terms.
@@ -39,6 +47,8 @@ General-purpose Buy-Now-Pay-Later (BNPL) products are intentionally excluded. Ap
 ---
 
 ## 4. What Was Built vs. Deferred
+
+The full deferral list, with the reasoning and the approach each would take, is in [`docs/SCOPE.md`](docs/SCOPE.md).
 
 | Capability | Status | Architectural Approach & Reasoning |
 |---|---|---|
@@ -62,7 +72,9 @@ General-purpose Buy-Now-Pay-Later (BNPL) products are intentionally excluded. Ap
 
 ## 5. End-to-End Prototype Flow & Invariants
 
-1. **Statement Lookup & Cookie Grant:** The patient submits their statement reference and date of birth via `POST /api/statements/lookup`. The server validates credentials and issues a signed, cryptographically isolated httpOnly cookie (`aftercare_access`) that scopes access exclusively to that single statement.
+Every choice below, including the ones that were wrong first, is recorded in [`docs/DECISIONS.md`](docs/DECISIONS.md). The build session itself is in [`ai-sessions/`](ai-sessions/).
+
+1. **Statement Lookup & Cookie Grant:** The patient submits their statement reference and date of birth via `POST /api/statements/lookup`. The server validates credentials and issues a signed, domain-separated httpOnly cookie (`aftercare_access`) that scopes access exclusively to that single statement.
 2. **Portion Selection & Intent Creation:** The patient selects a payment portion (`"full"` or `"health_account"`). The server calculates the exact amount to prevent client-side floating-point unit injection bugs (e.g., passing raw floats as cents), then creates or reuses a live processor intent via `POST /api/payments/intent`.
 3. **Client-Side SDK Confirmation:** The Hyperswitch Web SDK mounts an isolated iframe for card entry. Confirmation happens directly between the browser and the processor, triggering 3DS redirects if required without exposing PAN data to the application server.
 4. **Webhook Ingestion & Immutable Ledger Append:** Cryptographically verified webhooks (`POST /api/webhooks/hyperswitch`) arrive with HMAC-SHA512 signatures, check idempotency claims against `event_id` to prevent retry loops, and append immutable observation rows to the append-only event log.
